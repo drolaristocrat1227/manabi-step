@@ -976,9 +976,6 @@
     { id: 'u2_data', grade: 2, name: 'データの活用' },
     { id: 'u2_prob', grade: 2, name: '確率' },
   ];
-  const unitById = {}; units.forEach((u) => { unitById[u.id] = u; u.skills = []; });
-  const byId = {};
-  list.forEach((s) => { byId[s.id] = s; s.grade = unitById[s.unit].grade; unitById[s.unit].skills.push(s.id); });
 
   // 「答え」の文字列を分数 {n, d} にする（−, /, 小数に対応）
   function parseAnswer(str) {
@@ -1002,7 +999,27 @@
     return !!a && !!b && a.n * b.d === b.n * a.d;
   }
 
-  const api = { list, byId, units, unitById, parseAnswer, sameValue };
-  root.SKILLS = api;
+  // 学年ごとのコース（スキル・単元・表示名）を組み立てる
+  function buildCourse(meta, skills, unitList) {
+    const unitById = {}; unitList.forEach((u) => { unitById[u.id] = u; u.skills = []; });
+    const byId = {};
+    skills.forEach((s) => { byId[s.id] = s; s.grade = unitById[s.unit].grade; unitById[s.unit].skills.push(s.id); });
+    return Object.assign({ list: skills, byId, units: unitList, unitById, parseAnswer, sameValue }, meta);
+  }
+
+  const api = buildCourse({
+    id: 'j2', title: '中学2年・数学', subj: '数学', main: 2,
+    gradeName: { 1: '中1', 2: '中2' }, gradeTitle: { 2: '中学2年', 1: '中学1年（復習）' },
+    titles: ['はじめの一歩', '見習い', 'チャレンジャー', 'がんばり屋', '努力家', '計算名人', '数学ファイター', '数学マスター', '数学博士', '伝説の数学者'],
+    goals: {
+      improve: { icon: '📈', name: '学力アップ', desc: '苦手なところから、自分のペースで力をのばす' },
+      exam: { icon: '📝', name: '定期テスト', desc: 'テストの日と範囲から、毎日のメニューを逆算する', names: ['中間テスト', '期末テスト'] },
+      entrance: { icon: '🎓', name: '高校受験', desc: '中1から全範囲の苦手をなくし、できる所も忘れないよう復習する' },
+    },
+  }, list, units);
+  root.COURSES = root.COURSES || {};
+  root.COURSES.j2 = api;
+  // ほかの学年のファイルからも使う道具
+  root.SKILL_KIT = { R, RNZ, pick, gcd, lcm, shuffle, num, par, poly, F, FS, steps, sys, fig, ln, pg, tx, ang, names, tick, add2, RAD, buildCourse };
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

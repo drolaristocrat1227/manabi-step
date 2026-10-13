@@ -1,6 +1,6 @@
 // オフラインでも使えるように、アプリのファイルを端末にキャッシュする（学習データは送信しない）
-const CACHE = 'manabi-v8';
-const FILES = ['./', './index.html', './css/style.css', './js/skills.js', './js/app.js', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
+const CACHE = 'manabi-v9';
+const FILES = ['./', './index.html', './css/style.css', './js/skills.js', './js/skills-e6.js', './js/app.js', './manifest.json', './icon.svg', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
