@@ -183,7 +183,7 @@ ${main}
 
   let D = null; // 実力チェック中の状態
   function diagStart() {
-    D = { queue: SK.list.filter((s) => s.grade === 2).map((s) => s.id), tested: {}, start: Date.now(), cur: null };
+    D = { queue: SK.list.filter((s) => s.grade === 2).map((s) => s.id), tested: {}, start: Date.now(), cur: null, items: [] };
     nextDiag();
   }
   function nextDiag() {
@@ -224,7 +224,7 @@ ${main}
     });
     const n = Object.keys(D.tested).length, c = okIds.length;
     const sec = Math.round((Date.now() - D.start) / 1000);
-    st.diag = { date: today(), results };
+    st.diag = { date: today(), results, items: D.items };
     st.log.push({ d: today(), t: Date.now(), mode: 'diag', skill: null, q: n, c, sec });
     save();
     D = null;
@@ -248,8 +248,31 @@ ${SK.units.map((u) => `
   <div class="unit-h">${u.grade === 1 ? '中1' : '中2'}・${esc(u.name)}</div>
   ${u.skills.map((id) => { const m = mark[res[id]]; return `<div class="res ${m[2]}"><span class="mk">${m[0]}</span><span class="nm">${esc(SK.byId[id].name)}</span><span class="st">${m[1]}</span></div>`; }).join('')}
 </div>`).join('')}
+${st.diag.items && st.diag.items.length ? `<div class="card">
+  <b>答えと解説</b>
+  <p class="muted small">見たいときだけ確認できます。</p>
+  <div class="row"><button class="btn soft" data-act="review" data-f="all">全問（${st.diag.items.length}問）</button>
+  <button class="btn soft" data-act="review" data-f="ng">まちがえた問題（${st.diag.items.filter((x) => !x.ok).length}問）</button></div>
+</div>` : ''}
 ${r ? `<div class="card"><div class="tag">まずはここから</div><h3>${esc(r.name)}</h3><button class="btn primary big" data-act="lesson" data-id="${r.id}">学習をはじめる</button></div>` : ''}
 <button class="btn ghost" data-go="home">ホームへ</button>`);
+  };
+
+  SCREENS.diagReview = function (filter) {
+    const items = (st.diag.items || []).map((x, i) => Object.assign({ no: i + 1 }, x)).filter((x) => filter !== 'ng' || !x.ok);
+    render(`
+<button class="back" data-go="diagResult">‹ 実力チェックの結果</button>
+<h1 class="page-h">答えと解説</h1>
+<div class="seg two"><button class="${filter !== 'ng' ? 'on' : ''}" data-act="review" data-f="all">全問</button><button class="${filter === 'ng' ? 'on' : ''}" data-act="review" data-f="ng">まちがえた問題</button></div>
+${items.length ? items.map((x) => { const s = SK.byId[x.skill]; return `
+<div class="card rv ${x.ok ? 'ok' : 'ng'}">
+  <div class="rv-h"><span class="mk">${x.ok ? '⭕' : '❌'}</span><span class="muted small">第${x.no}問・${s.grade === 1 ? '中1' : '中2'}・${esc(s.name)}</span></div>
+  <div class="q">${x.q}</div>
+  <div class="rv-a"><span class="muted small">あなたの答え</span><div>${x.user}</div></div>
+  <div class="rv-a"><span class="muted small">正解</span><div>${x.ans}</div></div>
+  <details${x.ok ? '' : ' open'}><summary>解説を見る</summary><div class="exp">${x.explain}</div></details>
+  ${x.ok ? '' : `<button class="btn soft small" data-act="lesson" data-id="${x.skill}">この単元を練習する</button>`}
+</div>`; }).join('') : '<div class="card center">🎉 まちがえた問題はありません！</div>'}`);
   };
 
   // ----- 単元マップ -----
@@ -289,7 +312,27 @@ ${pre.length ? `<div class="card warn">💡 先に <b>${pre.map((p) => esc(SK.by
   let P = null;
   function newQ(base) {
     const q = base.skill.gen();
-    return Object.assign(base, { q, inputs: (q.fields || []).map(() => ''), active: 0, hint: 0, tries: 0, done: false, feedback: null });
+    const slots = [];
+    (q.fields || []).forEach((f, k) => {
+      if (f.frac) slots.push({ k, part: 'd' }, { k, part: 'n' });
+      else slots.push({ k });
+    });
+    return Object.assign(base, { q, slots, inputs: slots.map(() => ''), active: 0, hint: 0, tries: 0, done: false, feedback: null });
+  }
+  // 欄 k の入力値（分数なら "分子/分母"）
+  function fieldValue(k) {
+    const f = P.q.fields[k];
+    const at = (part) => P.inputs[P.slots.findIndex((s) => s.k === k && s.part === part)];
+    if (!f.frac) return at(undefined);
+    const n = at('n'), d = at('d');
+    return d === '' ? n : n + '/' + d;
+  }
+  const slotName = (i) => { const s = P.slots[i]; return s.part === 'd' ? '分母' : s.part === 'n' ? '分子' : P.q.fields[s.k].label; };
+  // "1/6" → 分数の見た目に
+  function fmtVal(v) {
+    const t = String(v).replace(/-/g, '−');
+    const m = t.match(/^(−?)(\d+)\/(\d+)$/);
+    return m ? m[1] + '<span class="fr"><span>' + m[2] + '</span><span>' + m[3] + '</span></span>' : esc(t);
   }
   let S = null; // 練習セッション
   function practiceStart(id) {
@@ -323,10 +366,21 @@ ${pre.length ? `<div class="card warn">💡 先に <b>${pre.map((p) => esc(SK.by
         return `<button class="choice ${cls}" data-act="choose" data-k="${k}" ${P.done || cls ? 'disabled' : ''}>${c}</button>`;
       }).join('')}</div>`;
     } else {
-      input = `<div class="fields">${q.fields.map((f, k) => `
-<div class="frow" data-act="focus" data-k="${k}"><span class="flbl">${esc(f.label)}</span>
-<span class="field ${k === P.active && !P.done ? 'on' : ''} ${P.done ? (SK.sameValue(P.inputs[k], q.answer[k]) ? 'ok' : 'ng') : ''}">${esc(P.inputs[k].replace(/-/g, '−')) || '<i>?</i>'}</span>
-${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`).join('')}</div>`;
+      const box = (i, k) => {
+        const res = P.done ? (SK.sameValue(fieldValue(k), q.answer[k]) ? 'ok' : 'ng') : '';
+        return `<span class="field ${i === P.active && !P.done ? 'on' : ''} ${res}">${esc(P.inputs[i].replace(/-/g, '−')) || '<i>?</i>'}</span>`;
+      };
+      input = `<div class="fields">${q.fields.map((f, k) => {
+        if (f.frac) {
+          const d = P.slots.findIndex((s) => s.k === k && s.part === 'd'), n = d + 1;
+          return `<div class="frow"><span class="flbl">${esc(f.label)}</span>
+<div class="fracin"><div class="fpart" data-act="focus" data-k="${n}">${box(n, k)}<small>② 分子</small></div><div class="fline"></div>
+<div class="fpart" data-act="focus" data-k="${d}">${box(d, k)}<small>① 分母</small></div></div></div>`;
+        }
+        const i = P.slots.findIndex((s) => s.k === k);
+        return `<div class="frow" data-act="focus" data-k="${i}"><span class="flbl">${esc(f.label)}</span>${box(i, k)}
+${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
+      }).join('')}</div>`;
       if (!P.done) input += keypadHTML();
     }
     let hints = '';
@@ -347,11 +401,11 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`).join('')}</
   }
 
   function keypadHTML() {
-    const keys = ['7', '8', '9', 'back', '4', '5', '6', '-', '1', '2', '3', '/', '0', '.', 'clr', 'tab'];
-    const label = { back: '⌫', '-': '−', '/': '分数 /', clr: 'C', tab: '次の欄' };
-    const multi = P.q.fields.length > 1;
+    const keys = ['7', '8', '9', 'back', '4', '5', '6', '-', '1', '2', '3', 'tab', '0', 'clr'];
+    const label = { back: '⌫', '-': '−', clr: 'C', tab: '次の欄 →' };
+    const multi = P.slots.length > 1;
     return `<div class="keypad">${keys.map((k) => (k === 'tab' && !multi ? '<span></span>' :
-      `<button class="key ${/\d/.test(k) ? '' : 'fn'}" data-act="key" data-k="${k}">${label[k] || k}</button>`)).join('')}</div>`;
+      `<button class="key ${/\d/.test(k) ? '' : 'fn'} ${k === '0' || k === 'clr' ? 'wide' : ''}" data-act="key" data-k="${k}">${label[k] || k}</button>`)).join('')}</div>`;
   }
 
   SCREENS.practice = SCREENS.diag = function () { render(questionHTML()); };
@@ -364,22 +418,21 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`).join('')}</
     else if (k === 'clr') v = '';
     else if (k === 'tab') { P.active = (P.active + 1) % P.inputs.length; return rerender(); }
     else if (k === '-') v = v.startsWith('-') ? v.slice(1) : '-' + v;
-    else if (v.length < 8) {
-      if ((k === '/' || k === '.') && (v.includes('/') || v.includes('.') || v.replace('-', '') === '')) return;
-      v += k;
-    }
+    else if (/^\d$/.test(k) && v.length < 6) v += k;
     P.inputs[P.active] = v;
     rerender();
   }
 
   function check() {
     const q = P.q;
-    if (P.inputs.some((v) => SK.parseAnswer(v) === null)) {
-      const k = P.inputs.findIndex((v) => SK.parseAnswer(v) === null);
-      P.active = k; rerender();
-      return toast('「' + q.fields[k].label + '」を入力してね');
+    const empty = P.inputs.findIndex((v) => v.replace('-', '') === '');
+    if (empty >= 0) {
+      P.active = empty; rerender();
+      return toast('「' + slotName(empty) + '」を入力してね');
     }
-    judge(P.inputs.every((v, k) => SK.sameValue(v, q.answer[k])));
+    const bad = q.fields.findIndex((f, k) => SK.parseAnswer(fieldValue(k)) === null);
+    if (bad >= 0) return toast('分母に 0 は使えないよ');
+    judge(q.fields.every((f, k) => SK.sameValue(fieldValue(k), q.answer[k])));
   }
 
   function choose(k) {
@@ -390,12 +443,22 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`).join('')}</
   function answerText() {
     const q = P.q;
     if (q.choices) return q.choices[q.correct];
-    return q.fields.map((f, k) => `${esc(f.label)} <b>${esc(String(q.answer[k]).replace(/-/g, '−'))}</b>${esc(f.post || '')}`).join('　');
+    return q.fields.map((f, k) => `${esc(f.label)} <b>${fmtVal(q.answer[k])}</b>${esc(f.post || '')}`).join('　');
+  }
+  function userText() {
+    const q = P.q;
+    if (q.choices) return P.picked === undefined ? '' : q.choices[P.picked];
+    return q.fields.map((f, k) => `${esc(f.label)} <b>${fmtVal(fieldValue(k))}</b>${esc(f.post || '')}`).join('　');
+  }
+  // 実力チェックの1問を、あとで答えと解説を見られるように記録する
+  function diagRecord(correct, dunno) {
+    D.items.push({ skill: P.skill.id, q: P.q.q, user: dunno ? 'わからない' : userText(), ans: answerText(), explain: P.q.explain, ok: correct });
   }
 
   function judge(correct) {
     if (P.mode === 'diag') {
       log1(correct);
+      diagRecord(correct, false);
       return diagAnswer(correct);
     }
     if (correct) {
@@ -511,6 +574,7 @@ ${r && r.id !== S.skill.id ? `<button class="btn soft big" data-act="lesson" dat
 <div class="card no-print">
   <b>設定</b>
   <button class="btn soft" data-act="rename">ニックネームを変更</button>
+  ${st.diag ? '<button class="btn soft" data-go="diagResult">前回の実力チェックの結果・解説</button>' : ''}
   <button class="btn soft" data-act="diagIntro">実力チェックをやり直す</button>
   <button class="btn danger" data-act="reset">すべての記録を削除</button>
 </div>
@@ -563,7 +627,8 @@ ${r && r.id !== S.skill.id ? `<button class="btn soft big" data-act="lesson" dat
     choose: (d) => { if (!P.done) choose(Number(d.k)); },
     hint: () => { P.hint = Math.min(P.hint + 1, P.q.hints.length); rerender(); },
     reveal: () => reveal(false),
-    dunno: () => { log1(false); diagAnswer(false); },
+    dunno: () => { log1(false); diagRecord(false, true); diagAnswer(false); },
+    review: (d) => go('diagReview', d.f || 'all'),
     next,
     quitPractice: () => { if (confirm('練習をやめますか？（ここまでの結果は残ります）')) { if (S.results.length) finishPractice(); else go('lesson', S.skill.id); } },
     quitDiag: () => { if (confirm('実力チェックをやめますか？（結果は保存されません）')) { D = null; go('home'); } },
@@ -590,7 +655,6 @@ ${r && r.id !== S.skill.id ? `<button class="btn soft big" data-act="lesson" dat
     if (P.q.choices) return;
     if (/^[0-9]$/.test(e.key)) key(e.key);
     else if (e.key === '-') key('-');
-    else if (e.key === '/' || e.key === '.') key(e.key);
     else if (e.key === 'Backspace') key('back');
     else if (e.key === 'Tab') { e.preventDefault(); key('tab'); }
     else if (e.key === 'Enter') check();

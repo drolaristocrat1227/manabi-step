@@ -61,7 +61,7 @@
   const FORM_LIN = 'y = <b>□</b>x + <b>□</b>（例：y = 2x − 3 なら 2 と −3）';
   const FORM_XC = '<b>□</b>x + <b>□</b>（例：2x − 3 なら 2 と −3）';
   const FORM_XY = '<b>□</b>x + <b>□</b>y（例：2x − y なら 2 と −1）';
-  const FORM_FRAC = '分数は「1/6」のように入力（約分しよう）';
+  const FORM_FRAC = '分数は <b>①分母 → ②分子</b> の順に入れよう（約分した形で）';
 
   // ---------- スキル ----------
   const list = [];
@@ -511,7 +511,7 @@
       const k = E[1].length;
       return {
         q: `1つのさいころを投げるとき、${E[0]}確率`, form: FORM_FRAC,
-        fields: [{ label: '確率' }], answer: [FS(k, 6)],
+        fields: [{ label: '確率', frac: true }], answer: [FS(k, 6)],
         hints: ['全部で6通り。あてはまる目はいくつある？', `あてはまる目：${E[1].join('、')} の${k}通り`],
         explain: steps([`あてはまる目：${E[1].join('、')}（${k}通り）`, `${k} ÷ 6 = ${F(k, 6)}`]),
       };
@@ -531,7 +531,7 @@
       const k = pairs.length, ps = pairs.map((p) => `(${p[0]},${p[1]})`).join(' ');
       return {
         q: `大小2つのさいころを同時に投げるとき、${label}確率`, form: FORM_FRAC,
-        fields: [{ label: '確率' }], answer: [FS(k, 36)],
+        fields: [{ label: '確率', frac: true }], answer: [FS(k, 36)],
         hints: ['全部で 6 × 6 = 36通り。（大, 小）の組で書き出そう。', `あてはまるのは ${ps} の${k}通り`],
         explain: steps([`あてはまる：${ps}（${k}通り）`, `${k} ÷ 36 = ${F(k, 36)}`]),
       };
@@ -552,7 +552,7 @@
       const k = ok.length;
       return {
         q: `${n}枚の硬貨を同時に投げるとき、${label}確率`, form: FORM_FRAC,
-        fields: [{ label: '確率' }], answer: [FS(k, total)],
+        fields: [{ label: '確率', frac: true }], answer: [FS(k, total)],
         hints: [`全部で ${total}通り。樹形図で書き出そう。`, `あてはまるのは ${ok.join('、')} の${k}通り`],
         explain: steps([`全部：${all.join('、')}（${total}通り）`, `あてはまる：${k}通り`, `${k} ÷ ${total} = ${F(k, total)}`]),
       };
