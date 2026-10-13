@@ -365,3 +365,7 @@ body.memo-open #app { padding-bottom: calc(46vh + 24px); }
 .sh-ord { margin-top: 4px; font-size: .9rem; }
 .sh-line { border-bottom: 1px solid #111; height: 26px; margin-top: 4px; }
 .q .ja { font-size: .85rem; font-weight: 500; color: var(--muted); margin-top: 4px; }
+.mini-tbl { margin: 0 auto; font-size: .85rem; width: auto; min-width: 70%; }
+.mini-tbl th, .mini-tbl td { padding: 3px 4px; text-align: center; border-top: 1px solid var(--line); white-space: nowrap; }
+.mini-tbl th { text-align: center; font-weight: 600; font-size: .75rem; }
+.conds:has(.mini-tbl) { overflow-x: auto; }
