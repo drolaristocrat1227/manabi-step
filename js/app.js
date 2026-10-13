@@ -977,7 +977,7 @@ ${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft
 
   SCREENS.printPreview = function () {
     const it = PR.items, inc = PR.inc, d = parseDay(today());
-    const title = { skill: SK.byId[PR.skill || 's1_addsub'].name, menu: '今日のメニュー', weak: '苦手な単元', units: PR.units.map((u) => SK.unitById[u].name).join('・'), diag: '実力チェックの見直し' }[PR.src];
+    const title = PR.src === 'skill' ? SK.byId[PR.skill].name : PR.src === 'units' ? PR.units.map((u) => SK.unitById[u].name).join('・') : { menu: '今日のメニュー', weak: '苦手な単元', diag: '実力チェックの見直し' }[PR.src];
     const head = (sub) => `<div class="sh-head"><div><b>まなびステップ　練習プリント</b>${sub ? `<span class="sh-sub">${sub}</span>` : ''}</div><div class="sh-meta">${esc(title)}　${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日　名前（　　　　　　　）</div></div>`;
     const qs = inc.q ? `<section class="sh-page">${head('')}<ol class="sh-qs">${it.map((x) => `<li class="sh-q"><div class="sh-skill">${esc(x.name)}</div><div class="q">${x.q}</div>${x.blank}<div class="sh-work"></div></li>`).join('')}</ol></section>` : '';
     const as = inc.a || inc.e ? `<section class="sh-page ${inc.q ? 'brk' : ''}">${head(inc.a && inc.e ? '解答・解説' : inc.a ? '解答' : '解説')}<ol class="sh-as">${it.map((x) => `<li class="sh-a">${inc.q ? '' : `<div class="sh-skill">${esc(x.name)}</div><div class="q">${x.q}</div>`}${inc.a ? `<div class="sh-ans">答え　${x.ans}</div>` : ''}${inc.e ? `<div class="exp">${x.explain}</div>` : ''}</li>`).join('')}</ol></section>` : '';

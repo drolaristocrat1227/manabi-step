@@ -1007,10 +1007,11 @@
     if (it.s) {
       const tokens = it.s.split(' ');
       let sh; do { sh = shuffle(tokens); } while (tokens.length > 2 && sh.join(' ') === it.s);
-      return { q: it.q, order: { tokens: sh, answer: tokens }, hints, explain: steps([`<b>${it.s}</b>`].concat(it.e ? [it.e] : [])) };
+      return { q: it.q, order: { tokens: sh, answer: tokens }, hints, explain: it.e || `正しい文：${it.s}` };
     }
     const opts = shuffle([it.a].concat(it.w));
-    return { q: it.q, choices: opts, correct: opts.indexOf(it.a), hints, explain: steps([`答え：<b>${it.a}</b>`].concat(it.e ? [it.e] : [])) };
+    // 答えは画面の「答え：」にも出るので、解説には書かない（解説がない問題だけ答えを示す）
+    return { q: it.q, choices: opts, correct: opts.indexOf(it.a), hints, explain: it.e || `答えは「${it.a}」。` };
   }
   // 全部を出し切るまで同じ問題をくり返さない
   function fromBank(items, hint) {
