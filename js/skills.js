@@ -999,6 +999,28 @@
     return !!a && !!b && a.n * b.d === b.n * a.d;
   }
 
+  // ---------- 問題バンク（あらかじめ作った問題）から出題する ----------
+  // 選択式：{ q, a: 正解, w: [まちがいの選択肢…], e: 解説, h: ヒント }
+  // 並べかえ：{ q: 日本語など, s: '正解の文を 空白で 区切る', e, h }
+  function bankQ(it, hint) {
+    const hints = [hint[0], it.h || hint[1]];
+    if (it.s) {
+      const tokens = it.s.split(' ');
+      let sh; do { sh = shuffle(tokens); } while (tokens.length > 2 && sh.join(' ') === it.s);
+      return { q: it.q, order: { tokens: sh, answer: tokens }, hints, explain: steps([`<b>${it.s}</b>`].concat(it.e ? [it.e] : [])) };
+    }
+    const opts = shuffle([it.a].concat(it.w));
+    return { q: it.q, choices: opts, correct: opts.indexOf(it.a), hints, explain: steps([`答え：<b>${it.a}</b>`].concat(it.e ? [it.e] : [])) };
+  }
+  // 全部を出し切るまで同じ問題をくり返さない
+  function fromBank(items, hint) {
+    let pool = [];
+    return function () {
+      if (!pool.length) pool = shuffle(items.map((_, i) => i));
+      return bankQ(items[pool.pop()], hint);
+    };
+  }
+
   // 学年ごとのコース（スキル・単元・表示名）を組み立てる
   function buildCourse(meta, skills, unitList) {
     const unitById = {}; unitList.forEach((u) => { unitById[u.id] = u; u.skills = []; });
@@ -1008,7 +1030,7 @@
   }
 
   const api = buildCourse({
-    id: 'j2', title: '中学2年・数学', subj: '数学', main: 2,
+    id: 'j2', title: '中学2年・数学', subj: '数学', subjKey: 'math', group: 'j2', icon: '📐', main: 2,
     gradeName: { 1: '中1', 2: '中2' }, gradeTitle: { 2: '中学2年', 1: '中学1年（復習）' },
     titles: ['はじめの一歩', '見習い', 'チャレンジャー', 'がんばり屋', '努力家', '計算名人', '数学ファイター', '数学マスター', '数学博士', '伝説の数学者'],
     goals: {
@@ -1020,6 +1042,6 @@
   root.COURSES = root.COURSES || {};
   root.COURSES.j2 = api;
   // ほかの学年のファイルからも使う道具
-  root.SKILL_KIT = { R, RNZ, pick, gcd, lcm, shuffle, num, par, poly, F, FS, steps, sys, fig, ln, pg, tx, ang, names, tick, add2, RAD, buildCourse };
+  root.SKILL_KIT = { R, RNZ, pick, gcd, lcm, shuffle, num, par, poly, F, FS, steps, sys, fig, ln, pg, tx, ang, names, tick, add2, RAD, buildCourse, fromBank, J2_GOALS: api.goals };
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

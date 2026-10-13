@@ -346,3 +346,22 @@ body.memo-open #app { padding-bottom: calc(46vh + 24px); }
   body.memo-open #app { padding-bottom: 0; }
 }
 .fig circle.dot { fill: currentColor; stroke: none; }
+
+/* 教科の切りかえ */
+.subjbar { display: flex; gap: 6px; overflow-x: auto; margin: 0 -16px 10px; padding: 2px 16px 6px; scrollbar-width: none; }
+.subjbar::-webkit-scrollbar { display: none; }
+.subjbar button { flex: none; border: 2px solid var(--line); background: var(--card); border-radius: 99px; padding: 6px 14px; font-weight: 700; font-size: .9rem; }
+.subjbar button span { margin-right: 4px; }
+.subjbar button.on { border-color: var(--primary); background: var(--primary); color: var(--primary-ink); }
+
+/* 並べかえ問題 */
+.ord-ans { min-height: 64px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px; margin: 6px 0 10px; border: 2px dashed var(--line); border-radius: 12px; background: var(--card); }
+.ord-ans.ok { border: 2px solid var(--ok); background: var(--ok-bg); }
+.ord-ans.ng { border: 2px solid var(--ng); background: var(--ng-bg); }
+.ord-pool { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.tok { border: 2px solid var(--line); background: var(--card); border-radius: 10px; padding: 8px 12px; font-size: 1.05rem; font-weight: 700; }
+.tok.on { border-color: var(--primary); background: var(--soft); }
+.tok.used { opacity: .25; border-style: dashed; }
+.sh-ord { margin-top: 4px; font-size: .9rem; }
+.sh-line { border-bottom: 1px solid #111; height: 26px; margin-top: 4px; }
+.q .ja { font-size: .85rem; font-weight: 500; color: var(--muted); margin-top: 4px; }

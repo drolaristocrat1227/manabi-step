@@ -15,6 +15,11 @@
   const PREV = Number(Object.keys(SK.gradeName).find((g) => Number(g) !== SK.main)); // さかのぼり用の学年
   const gname = (g) => SK.gradeName[g];
   const gcdN = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) { [a, b] = [b, a % b]; } return a || 1; };
+  const SUBJECTS = [['math', '📐', '数学'], ['eng', '🔤', '英語'], ['jpn', '📖', '国語'], ['sci', '🔬', '理科'], ['soc', '🌏', '社会']];
+  const GROUPS = [['e6', '小学6年'], ['j2', '中学2年']];
+  const courseOf = (group, subj) => Object.keys(window.COURSES).find((c) => window.COURSES[c].group === group && window.COURSES[c].subjKey === subj);
+  const subjName = (C) => (C.subjKey === 'math' ? C.subj : SUBJECTS.find((x) => x[0] === C.subjKey)[2]);
+  const isCalc = SK.subjKey === 'math';
   function peek(c) { // ほかの学年の保存データ（名前の表示用）
     try { const o = JSON.parse(localStorage.getItem(storeKey(c)) || 'null'); return o && o.profile ? o : null; } catch (e) { return null; }
   }
@@ -26,7 +31,7 @@
   // ---------- 計算メモ（手書き。書いた内容は端末の外に出さず、次の問題で消える） ----------
   const memo = document.createElement('div');
   memo.id = 'memo'; memo.hidden = true;
-  memo.innerHTML = '<div class="memo-bar"><b>✏️ 計算メモ</b><button data-memo="pen" class="on">ペン</button><button data-memo="eraser">消しゴム</button><button data-memo="clear">全部消す</button><button data-memo="close" aria-label="閉じる">✕</button></div><canvas></canvas>';
+  memo.innerHTML = '<div class="memo-bar"><b>✏️ メモ</b><button data-memo="pen" class="on">ペン</button><button data-memo="eraser">消しゴム</button><button data-memo="clear">全部消す</button><button data-memo="close" aria-label="閉じる">✕</button></div><canvas></canvas>';
   document.body.appendChild(memo);
   const cvs = memo.querySelector('canvas'), ctx = cvs.getContext('2d');
   let memoOwner = null, eraser = false, pen = null;
@@ -306,18 +311,15 @@
   <p class="note">本名は入れなくてOK。</p>
   ${renaming ? `<p class="muted small">${esc(SK.title)}</p>` : `<div class="lbl">学年</div>
   <div class="seg">
-    ${['e6', 'j2'].map((c) => `<button class="${setupSel === c ? 'on' : ''}" data-act="setupCourse" data-c="${c}">${c === 'e6' ? '小学6年' : '中学2年'}</button>`).join('')}
+    ${GROUPS.map(([g, n]) => `<button class="${C.group === g ? 'on' : ''}" data-act="setupCourse" data-c="${courseOf(g, C.subjKey) || courseOf(g, 'math')}">${n}</button>`).join('')}
     <button disabled>中1<small>準備中</small></button><button disabled>中3<small>準備中</small></button>
   </div>
   <p class="note">ほかの学年は準備中です。</p>
   <div class="lbl">教科</div>
   <div class="subjects">
-    <button class="subj on">📐<span>${C.subj}</span></button>`}${renaming ? '' : `
-    <button class="subj" disabled>📖<span>国語</span><small>準備中</small></button>
-    <button class="subj" disabled>🔬<span>理科</span><small>準備中</small></button>
-    <button class="subj" disabled>🌏<span>社会</span><small>準備中</small></button>
-    <button class="subj" disabled>🔤<span>英語</span><small>準備中</small></button>
-  </div>`}
+    ${SUBJECTS.map(([k, ic, n]) => { const c = courseOf(C.group, k); return c ? `<button class="subj ${c === setupSel ? 'on' : ''}" data-act="setupCourse" data-c="${c}">${ic}<span>${k === 'math' ? window.COURSES[c].subj : n}</span></button>` : `<button class="subj" disabled>${ic}<span>${n}</span><small>準備中</small></button>`; }).join('')}
+  </div>
+  <p class="note">ほかの教科は、あとからホーム画面で切りかえられます。</p>`}
   <button class="btn primary big" data-act="start">${renaming ? '変更する' : 'はじめる'}</button>
   ${renaming ? '<button class="btn ghost" data-go="records">やめる</button>' : ''}
 </div>
@@ -368,7 +370,7 @@
       main = `<div class="card accent">
   <div class="tag">STEP 1</div>
   <h2>まずは実力チェック</h2>
-  <p>今どこまでわかっているかを確かめて、あなた専用の学習の順番を作ります。約20分。</p>
+  <p>今どこまでわかっているかを確かめて、あなた専用の学習の順番を作ります。約${Math.max(10, Math.round(SK.list.filter((x) => x.grade === SK.main && x.diag !== false).length / 5) * 5)}分。</p>
   <button class="btn primary big" data-act="diagIntro">実力チェックをはじめる</button>
 </div>`;
     } else if (!st.goal) {
@@ -386,7 +388,9 @@ ${r ? `<div class="card"><div class="tag">おすすめ</div><h3>${esc(r.name)}</
       main = goalCardHTML() + (menu || (r ? `<div class="card accent"><div class="tag">おすすめ</div><h2>${esc(r.name)}</h2>
 <button class="btn primary big" data-act="lesson" data-id="${r.id}">はじめる（${PRACTICE_N}問）</button></div>` : `<div class="card accent"><h2>🎉 全スキル マスター！</h2><p>すごい！好きな単元で腕だめししよう。</p></div>`));
     }
+    const subs = SUBJECTS.map((x) => [x, courseOf(SK.group, x[0])]).filter((x) => x[1]);
     render(`
+${subs.length > 1 ? `<div class="subjbar">${subs.map(([x, c]) => `<button class="${c === course ? 'on' : ''}" data-act="switchSubj" data-c="${c}"><span>${x[1]}</span>${c === course ? subjName(SK) : subjName(window.COURSES[c])}</button>`).join('')}</div>` : ''}
 <div class="greet">${hello}、<b>${esc(p.name)}</b> さん</div>
 <div class="lvcard"><div class="lv">Lv.${L.lv}</div><div class="lvt"><b>${esc(L.title)}</b><div class="bar sm"><i style="width:${L.pct}%"></i></div><span class="muted small">次のレベルまで ${L.rest} pt</span></div></div>
 <div class="stats">
@@ -630,7 +634,7 @@ ${pre.length ? `<div class="card warn">💡 先に <b>${pre.map((p) => esc(SK.by
       if (f.frac) slots.push({ k, part: 'd' }, { k, part: 'n' });
       else slots.push({ k });
     });
-    return Object.assign(base, { q, slots, inputs: slots.map(() => ''), active: 0, hint: 0, tries: 0, done: false, feedback: null });
+    return Object.assign(base, { q, slots, inputs: slots.map(() => ''), ord: [], active: 0, hint: 0, tries: 0, done: false, feedback: null });
   }
   // 欄 k の入力値（分数なら "分子/分母"）
   function fieldValue(k) {
@@ -685,6 +689,11 @@ ${pre.length ? `<div class="card warn">💡 先に <b>${pre.map((p) => esc(SK.by
         else if (P.wrongPicks && P.wrongPicks.includes(k)) cls = 'ng';
         return `<button class="choice ${cls} ${long}" data-act="choose" data-k="${k}" ${P.done || cls ? 'disabled' : ''}>${c}</button>`;
       }).join('')}</div>`;
+    } else if (q.order) {
+      const T = q.order.tokens, ok = P.done && ordText() === q.order.answer.join(' ');
+      input = `<div class="ord-ans ${P.done ? (ok ? 'ok' : 'ng') : ''}">${P.ord.length ? P.ord.map((i, k) => `<button class="tok on" data-act="ordDel" data-k="${k}" ${P.done ? 'disabled' : ''}>${esc(T[i])}</button>`).join('') : '<span class="muted small">下の語をタップして、文を作ろう</span>'}</div>
+${P.done ? '' : `<div class="ord-pool">${T.map((t, i) => (P.ord.includes(i) ? `<span class="tok used">${esc(t)}</span>` : `<button class="tok" data-act="ordAdd" data-i="${i}">${esc(t)}</button>`)).join('')}</div>
+<div class="row"><button class="btn soft small" data-act="ordBack">↩ 1つもどす</button><button class="btn soft small" data-act="ordClear">全部もどす</button></div>`}`;
     } else {
       const box = (i, k) => {
         const res = P.done ? (SK.sameValue(fieldValue(k), q.answer[k]) ? 'ok' : 'ng') : '';
@@ -711,11 +720,11 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
     if (P.done) {
       actions = `<button class="btn primary big" data-act="next">${isDiag ? '次へ' : S.i + 1 >= S.n ? '結果を見る' : '次の問題へ'}</button>`;
     } else if (isDiag) {
-      actions = `${q.choices ? '' : '<button class="btn primary big" data-act="check">答える</button>'}<div class="row"><button class="btn soft" data-act="memo">${memo.hidden ? '✏️ 計算メモ' : '✏️ メモを閉じる'}</button><button class="btn soft" data-act="dunno">わからない</button></div>`;
+      actions = `${q.choices ? '' : `<button class="btn primary big" data-act="check">答える</button>`}<div class="row"><button class="btn soft" data-act="memo">${memo.hidden ? (isCalc ? '✏️ 計算メモ' : '✏️ メモ') : '✏️ メモを閉じる'}</button><button class="btn soft" data-act="dunno">わからない</button></div>`;
     } else {
       actions = `${q.choices ? '' : '<button class="btn primary big" data-act="check">答え合わせ</button>'}
 <div class="row">${P.hint < q.hints.length ? `<button class="btn soft" data-act="hint">💡 ヒント（${P.hint + 1}/${q.hints.length}）</button>` : ''}<button class="btn soft" data-act="reveal">答えを見る</button></div>
-<button class="btn soft" data-act="memo">${memo.hidden ? '✏️ 計算メモ（指で書けます）' : '✏️ メモを閉じる'}</button>`;
+<button class="btn soft" data-act="memo">${memo.hidden ? (isCalc ? '✏️ 計算メモ（指で書けます）' : '✏️ メモ（指で書けます）') : '✏️ メモを閉じる'}</button>`;
     }
     // 「もう一度」の声かけは問題のすぐ下、正解・解説は入力欄の下に出す
     return P.done ? head + body + hints + input + fb + actions : head + body + fb + hints + input + actions;
@@ -750,8 +759,13 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
     rerender();
   }
 
+  const ordText = () => P.ord.map((i) => P.q.order.tokens[i]).join(' ');
   function check() {
     const q = P.q;
+    if (q.order) {
+      if (P.ord.length < q.order.tokens.length) return toast('すべての語を使って文を作ってね');
+      return judge(ordText() === q.order.answer.join(' '));
+    }
     const filled = (i) => P.inputs[i] !== undefined && P.inputs[i].replace('-', '') !== '';
     const empty = P.inputs.findIndex((v, i) => !filled(i) && !(P.slots[i].part === 'd' && filled(i + 1)));
     if (empty >= 0) {
@@ -773,11 +787,13 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
   function answerText() {
     const q = P.q;
     if (q.choices) return q.choices[q.correct];
+    if (q.order) return esc(q.order.answer.join(' '));
     return q.fields.map((f, k) => `${esc(f.label)} <b>${fmtVal(q.answer[k])}</b>${esc(f.post || '')}`).join('　');
   }
   function userText() {
     const q = P.q;
     if (q.choices) return P.picked === undefined ? '' : q.choices[P.picked];
+    if (q.order) return esc(ordText());
     return q.fields.map((f, k) => `${esc(f.label)} <b>${fmtVal(fieldValue(k))}</b>${esc(f.post || '')}`).join('　');
   }
   // 実力チェックの1問を、あとで答えと解説を見られるように記録する
@@ -911,10 +927,12 @@ ${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft
   }
   function blankOf(p) {
     if (p.choices) return `<div class="sh-ch">${p.choices.map((c, k) => `<span>${KANA[k]}　${c}</span>`).join('')}</div>`;
+    if (p.order) return `<div class="sh-ord">（ ${p.order.tokens.map(esc).join(' / ')} ）</div><div class="sh-line"></div>`;
     return `<div class="sh-blank">${p.fields.map((f) => `<span>${esc(f.label)}${f.frac ? '（分数）' : ''} <i class="ul"></i>${esc(f.post || '')}</span>`).join('')}</div>`;
   }
   function ansOf(p) {
     if (p.choices) return `${KANA[p.correct]}　${p.choices[p.correct]}`;
+    if (p.order) return esc(p.order.answer.join(' '));
     return p.fields.map((f, k) => `${esc(f.label)} <b>${fmtVal(p.answer[k])}</b>${esc(f.post || '')}`).join('　');
   }
   // 画面のキーパッド用の案内（分母→分子の順、小数キー）は紙では不要なので出さない
@@ -1028,7 +1046,7 @@ ${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft
   <b>設定</b>
   <button class="btn soft" data-go="goal">目標を${st.goal ? '変更' : '決める'}</button>
   <button class="btn soft" data-act="rename">ニックネームを変更</button>
-  <button class="btn soft" data-go="course">学年を切りかえる（いま：${esc(SK.title)}）</button>
+  <button class="btn soft" data-go="course">学年・教科を切りかえる（いま：${esc(SK.title)}）</button>
   ${st.diag ? '<button class="btn soft" data-go="diagResult">前回の実力チェックの結果・解説</button>' : ''}
   <button class="btn soft" data-act="diagIntro">実力チェックをやり直す</button>
 </div>
@@ -1042,10 +1060,10 @@ ${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft
   SCREENS.course = function () {
     render(`
 <button class="back" data-go="records">‹ 学習の記録</button>
-<h1 class="page-h">学年を切りかえる</h1>
-<p class="muted small">学年ごとに、ニックネーム・記録・目標・バッジは別々に保存されます。</p>
+<h1 class="page-h">学年・教科を切りかえる</h1>
+<p class="muted small">学年・教科ごとに、記録・目標・バッジは別々に保存されます。</p>
 <div class="card">
-${Object.keys(window.COURSES).map((c) => { const o = c === course ? st : peek(c); return `<button class="gopt ${c === course ? 'on' : ''}" data-act="switchCourse" data-c="${c}"><span><b>${esc(window.COURSES[c].title)}</b><small>${o ? esc(o.profile.name) + ' さん' : 'まだ使っていません'}${c === course ? '（いま使用中）' : ''}</small></span></button>`; }).join('')}
+${GROUPS.flatMap(([g]) => SUBJECTS.map(([k]) => courseOf(g, k)).filter(Boolean)).map((c) => { const o = c === course ? st : peek(c); return `<button class="gopt ${c === course ? 'on' : ''}" data-act="switchCourse" data-c="${c}"><span><b>${esc(window.COURSES[c].title)}</b><small>${o ? esc(o.profile.name) + ' さん' : 'まだ使っていません'}${c === course ? '（いま使用中）' : ''}</small></span></button>`; }).join('')}
 </div>`);
   };
 
@@ -1137,6 +1155,15 @@ ${cancel}
       save(); go('home');
     },
     setupCourse: (d) => { const v = document.getElementById('nm').value; setupSel = d.c; go('setup', true); document.getElementById('nm').value = v; },
+    // 同じ学年のほかの教科へ。はじめての教科なら、いまのニックネームで始める
+    switchSubj: (d) => {
+      if (d.c === course) return;
+      try {
+        if (!peek(d.c)) { const o = blank(); o.profile = { name: st.profile.name, course: d.c, created: today() }; localStorage.setItem(storeKey(d.c), JSON.stringify(o)); }
+        localStorage.setItem(COURSE_KEY, d.c);
+      } catch (e) { return toast('切りかえられませんでした'); }
+      location.reload();
+    },
     switchCourse: (d) => {
       if (d.c === course) return go('home');
       try { localStorage.setItem(COURSE_KEY, d.c); } catch (e) { return toast('切りかえられませんでした'); }
@@ -1155,6 +1182,10 @@ ${cancel}
       else go('lesson', t.id);
     },
     key: (d) => key(d.k),
+    ordAdd: (d) => { const i = Number(d.i); if (!P.done && !P.ord.includes(i)) { P.ord.push(i); rerender(); } },
+    ordDel: (d) => { if (!P.done) { P.ord.splice(Number(d.k), 1); rerender(); } },
+    ordBack: () => { if (!P.done) { P.ord.pop(); rerender(); } },
+    ordClear: () => { if (!P.done) { P.ord = []; rerender(); } },
     focus: (d) => { if (!P.done) { P.active = Number(d.k); rerender(); } },
     check,
     choose: (d) => { if (!P.done) choose(Number(d.k)); },
@@ -1234,7 +1265,7 @@ ${cancel}
   document.addEventListener('keydown', (e) => {
     if ((screen !== 'practice' && screen !== 'diag') || !P) return;
     if (P.done) { if (e.key === 'Enter') next(); return; }
-    if (P.q.choices) return;
+    if (P.q.choices || P.q.order) return;
     if (/^[0-9]$/.test(e.key)) key(e.key);
     else if (e.key === '-' || e.key === '.') key(e.key);
     else if (e.key === 'Backspace') key('back');

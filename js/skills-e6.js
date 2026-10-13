@@ -536,7 +536,7 @@
   ];
 
   const api = buildCourse({
-    id: 'e6', title: '小学6年・算数', subj: '算数', main: 6,
+    id: 'e6', title: '小学6年・算数', subj: '算数', subjKey: 'math', group: 'e6', icon: '📐', main: 6,
     gradeName: { 5: '小5', 6: '小6' }, gradeTitle: { 6: '小学6年', 5: '小学5年（ふく習）' },
     titles: ['はじめの一歩', '見習い', 'チャレンジャー', 'がんばり屋', '努力家', '計算名人', '算数ファイター', '算数マスター', '算数博士', '算数の達人'],
     goals: {
