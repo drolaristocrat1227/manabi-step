@@ -41,12 +41,19 @@
   cvs.addEventListener('pointerdown', (e) => { e.preventDefault(); cvs.setPointerCapture(e.pointerId); pen = memoPos(e); });
   cvs.addEventListener('pointermove', (e) => {
     if (!pen) return;
-    const q = memoPos(e), d = window.devicePixelRatio || 1;
+    e.preventDefault();
+    const d = window.devicePixelRatio || 1;
     ctx.globalCompositeOperation = eraser ? 'destination-out' : 'source-over';
     ctx.strokeStyle = getComputedStyle(document.body).color; ctx.lineWidth = (eraser ? 22 : 2.6) * d; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.beginPath(); ctx.moveTo(pen[0], pen[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
-    pen = q;
+    // すばやく書いたときも線がとぎれないよう、間の点もつなぐ
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    ctx.beginPath(); ctx.moveTo(pen[0], pen[1]);
+    (evs.length ? evs : [e]).forEach((ev) => { pen = memoPos(ev); ctx.lineTo(pen[0], pen[1]); });
+    ctx.stroke();
   });
+  // 書いている間に画面がスクロールしないようにする（iPhone の Safari は touch-action だけでは止まらない）
+  ['touchstart', 'touchmove'].forEach((ev) => cvs.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+  memo.querySelector('.memo-bar').addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
   ['pointerup', 'pointercancel'].forEach((ev) => cvs.addEventListener(ev, () => { pen = null; }));
   memo.addEventListener('click', (e) => {
     const b = e.target.closest('[data-memo]'); if (!b) return;

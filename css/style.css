@@ -307,7 +307,7 @@ label.btn { cursor: pointer; }
 .choice.long { font-size: 1rem; font-weight: 600; text-align: left; padding: 12px 14px; }
 
 /* 計算メモ */
-#memo { position: fixed; left: 0; right: 0; bottom: 0; height: 46vh; z-index: 8; display: flex; flex-direction: column; background: var(--card); border-top: 2px solid var(--line); box-shadow: 0 -4px 16px rgba(20, 30, 60, .12); padding-bottom: env(safe-area-inset-bottom); }
+#memo { overscroll-behavior: contain; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; position: fixed; left: 0; right: 0; bottom: 0; height: 46vh; z-index: 8; display: flex; flex-direction: column; background: var(--card); border-top: 2px solid var(--line); box-shadow: 0 -4px 16px rgba(20, 30, 60, .12); padding-bottom: env(safe-area-inset-bottom); }
 #memo[hidden] { display: none; }
 .memo-bar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; max-width: 560px; width: 100%; margin: 0 auto; }
 .memo-bar b { flex: 1; font-size: .9rem; }
