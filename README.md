@@ -1,5 +1,10 @@
 # まなびステップ（中2数学・第1段階）
 
+公開先：https://manabi-step.pages.dev/ （Cloudflare Pages）
+
+## 公開の更新
+アプリのファイルだけを別フォルダにコピーし、`npx wrangler pages deploy <フォルダ> --project-name manabi-step --branch main` で公開する（GitHubへのpushだけでは公開先に反映されない）。
+
 ## 使い方（PC）
 `index.html` をダブルクリックすると、ブラウザで開きます。インストールは不要です。
 
