@@ -33,4 +33,5 @@ js/skills.js      問題の生成、ヒント、解説（スキルの追加は�
 js/app.js         画面、実力チェック、記録、保存
 sw.js             オフライン対応
 manifest.json     ホーム画面に追加するための設定
+icon-*.png        アプリのアイコン（Android用・iPhone用）
 ```
