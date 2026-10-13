@@ -576,11 +576,52 @@ ${r && r.id !== S.skill.id ? `<button class="btn soft big" data-act="lesson" dat
   <button class="btn soft" data-act="rename">ニックネームを変更</button>
   ${st.diag ? '<button class="btn soft" data-go="diagResult">前回の実力チェックの結果・解説</button>' : ''}
   <button class="btn soft" data-act="diagIntro">実力チェックをやり直す</button>
-  <button class="btn danger" data-act="reset">すべての記録を削除</button>
 </div>
-<p class="privacy no-print">🔒 記録はこの端末の中だけに保存され、外部には送信されません。</p>`);
+<p class="privacy no-print">🔒 記録はこの端末の中だけに保存され、外部には送信されません。</p>
+<details class="more no-print"><summary>その他</summary><button class="linkish" data-go="reset">データの初期化</button></details>`);
     const imp = document.getElementById('imp');
     if (imp) imp.addEventListener('change', importFile);
+  };
+
+  // ----- データの初期化（誤操作を防ぐため、確認を2回はさむ） -----
+  SCREENS.reset = function (step) {
+    step = step || 0;
+    const t = totals();
+    const cancel = '<button class="btn primary big" data-go="records">やめる</button>';
+    if (step === 0) {
+      render(`
+<button class="back" data-go="records">‹ 学習の記録</button>
+<div class="card">
+  <h2>データの初期化</h2>
+  <p>この端末に保存されている、次のデータをすべて削除して最初の状態に戻します。</p>
+  <ul class="list">
+    <li>ニックネーム（${esc(st.profile ? st.profile.name : '')}）</li>
+    <li>実力チェックの結果</li>
+    <li>学習の記録（${t.q}問・${streak()}日連続）</li>
+  </ul>
+  <p class="muted small">削除すると元に戻せません。残しておきたい場合は、先に「記録」→「バックアップを保存」をしてください。</p>
+</div>
+${cancel}
+<button class="btn ghost" data-act="resetStep" data-step="1">初期化に進む</button>`);
+    } else if (step === 1) {
+      render(`
+<div class="card warn center">
+  <div class="tag">確認 1 / 2</div>
+  <h2>本当に初期化しますか？</h2>
+  <p>これまでの学習の記録が<b>すべて消えます</b>。</p>
+</div>
+${cancel}
+<button class="btn danger" data-act="resetStep" data-step="2">はい、初期化します</button>`);
+    } else {
+      render(`
+<div class="card warn center">
+  <div class="tag">確認 2 / 2（最後の確認）</div>
+  <h2>削除すると元に戻せません</h2>
+  <p>本当に、すべてのデータを削除しますか？</p>
+</div>
+${cancel}
+<button class="btn danger" data-act="doReset">すべて削除する</button>`);
+    }
   };
 
   // ---------- 保存・出力 ----------
@@ -635,10 +676,12 @@ ${r && r.id !== S.skill.id ? `<button class="btn soft big" data-act="lesson" dat
     print: () => window.print(),
     export: exportFile,
     rename: () => go('setup'),
-    reset: () => {
-      if (!confirm('すべての記録を削除します。元に戻せません。よろしいですか？')) return;
-      if (!confirm('本当に削除しますか？')) return;
-      st = blank(); save(); go('setup');
+    resetStep: (d) => go('reset', Number(d.step)),
+    doReset: () => {
+      try { localStorage.removeItem(KEY); } catch (e) { /* 消せない環境でも画面上は初期化する */ }
+      st = blank();
+      toast('すべての記録を削除しました');
+      go('setup');
     },
   };
 

@@ -225,3 +225,9 @@ label.btn { cursor: pointer; }
 .rv details { margin-top: 8px; }
 .rv summary { cursor: pointer; color: var(--primary); font-weight: 600; }
 .rv .exp { background: var(--soft); border-radius: 10px; padding: 10px 12px; margin-top: 6px; }
+
+/* 目立たない「その他」（データの初期化） */
+.more { text-align: center; margin: 28px 0 8px; font-size: .8rem; color: var(--muted); }
+.more summary { cursor: pointer; display: inline-block; padding: 6px 12px; list-style: none; opacity: .7; }
+.more summary::-webkit-details-marker { display: none; }
+.linkish { display: block; margin: 6px auto 0; background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: .8rem; padding: 6px; }
