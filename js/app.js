@@ -8,11 +8,12 @@
   const SK = window.SKILLS;
   const KEY = 'manabi-step-v1';
   const PRACTICE_N = 5;
+  const REVIEW_N = 10;
   const app = document.getElementById('app');
   const nav = document.getElementById('nav');
 
   // ---------- 保存 ----------
-  const blank = () => ({ v: 1, profile: null, diag: null, skills: {}, log: [] });
+  const blank = () => ({ v: 1, profile: null, diag: null, skills: {}, log: [], goal: null, today: null, badges: {}, goalDays: [] });
   let st = load();
 
   function load() {
@@ -30,9 +31,15 @@
   // ---------- 小道具 ----------
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const pad = (n) => String(n).padStart(2, '0');
   const dayStr = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   const today = () => dayStr(new Date());
+  const parseDay = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const addDays = (s, n) => { const d = parseDay(s); d.setDate(d.getDate() + n); return dayStr(d); };
+  const daysBetween = (a, b) => Math.round((parseDay(b) - parseDay(a)) / 86400000);
+  const WD = ['日', '月', '火', '水', '木', '金', '土'];
+  const fmtDay = (s) => { const d = parseDay(s); return (d.getMonth() + 1) + '/' + d.getDate() + '（' + WD[d.getDay()] + '）'; };
   const sk = (id) => (st.skills[id] = st.skills[id] || { score: 0, diag: null, q: 0, c: 0 });
   const starsOf = (score) => (score >= 90 ? 3 : score >= 70 ? 2 : score >= 40 ? 1 : 0);
   const stars = (score) => { const n = starsOf(score); return '<span class="stars">' + '★'.repeat(n) + '<i>' + '☆'.repeat(3 - n) + '</i></span>'; };
@@ -68,17 +75,156 @@
     st.log.forEach((l) => { if (!filterDay || l.d === filterDay) { q += l.q; c += l.c; sec += l.sec; } });
     return { q, c, sec };
   }
-
-  // 次におすすめのスキル（前提から順に）
-  function recommend() {
-    const L = SK.list;
-    const isUntested1 = (s) => s.grade === 1 && sk(s.id).diag === 'untested';
-    return L.find((s) => sk(s.id).score < 40 && !isUntested1(s))
-      || L.find((s) => s.grade === 2 && sk(s.id).score < 70)
-      || L.find((s) => sk(s.id).score < 70)
-      || L.find((s) => sk(s.id).score < 90)
-      || null;
+  // 月曜はじまりの週で、今週と先週に解いた問題数
+  function weekCompare() {
+    const d = new Date(); const mon = new Date(d); mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    const thisStart = dayStr(mon), lastStart = addDays(thisStart, -7);
+    let now = 0, last = 0;
+    st.log.forEach((l) => { if (l.d >= thisStart) now += l.q; else if (l.d >= lastStart) last += l.q; });
+    return { now, last };
   }
+
+  // ---------- レベルと称号 ----------
+  const TITLES = ['はじめの一歩', '見習い', 'チャレンジャー', 'がんばり屋', '努力家', '計算名人', '数学ファイター', '数学マスター', '数学博士', '伝説の数学者'];
+  function xp() {
+    return st.log.reduce((a, l) => a + l.c * 10 + (l.mode === 'diag' ? 50 : 20), 0);
+  }
+  function levelOf(x) {
+    let lv = 1; while (x >= 50 * lv * (lv + 1)) lv++;          // 次のレベルまで：100, 300, 600, 1000 …
+    const from = 50 * (lv - 1) * lv, to = 50 * lv * (lv + 1);
+    return { lv, title: TITLES[Math.min(lv, TITLES.length) - 1], pct: Math.round(((x - from) / (to - from)) * 100), rest: to - x };
+  }
+
+  // ---------- バッジ ----------
+  const BADGES = [
+    { id: 'first', icon: '🌱', name: 'はじめの一歩', hint: '練習を1セットやる', ok: (s) => s.sessions >= 1 },
+    { id: 'diag', icon: '🎯', name: '実力チェック完了', hint: '実力チェックを最後まで受ける', ok: () => !!st.diag },
+    { id: 'goal', icon: '📌', name: '目標を決めた', hint: '目標を設定する', ok: () => !!st.goal },
+    { id: 'day1', icon: '✅', name: '今日の目標達成', hint: '今日のメニューをすべて終える', ok: () => st.goalDays.length >= 1 },
+    { id: 'day7', icon: '🗓', name: '目標達成 7日', hint: '今日のメニューを7日分終える', ok: () => st.goalDays.length >= 7 },
+    { id: 'st3', icon: '🔥', name: '3日連続', hint: '3日続けて学習する', ok: (s) => s.streak >= 3 },
+    { id: 'st7', icon: '🔥', name: '1週間連続', hint: '7日続けて学習する', ok: (s) => s.streak >= 7 },
+    { id: 'st14', icon: '💪', name: '2週間連続', hint: '14日続けて学習する', ok: (s) => s.streak >= 14 },
+    { id: 'st30', icon: '👑', name: '30日連続', hint: '30日続けて学習する', ok: (s) => s.streak >= 30 },
+    { id: 'q50', icon: '✏️', name: '50問達成', hint: '合計50問解く', ok: (s) => s.q >= 50 },
+    { id: 'q200', icon: '📚', name: '200問達成', hint: '合計200問解く', ok: (s) => s.q >= 200 },
+    { id: 'q500', icon: '🏔', name: '500問達成', hint: '合計500問解く', ok: (s) => s.q >= 500 },
+    { id: 'perfect', icon: '💯', name: '全問正解', hint: '1セットを全問正解する', ok: (s) => s.perfect >= 1 },
+    { id: 'perfect10', icon: '🌟', name: '全問正解 10回', hint: '全問正解を10回', ok: (s) => s.perfect >= 10 },
+    { id: 'review', icon: '🔁', name: '総復習デビュー', hint: '総復習（10問）をやる', ok: (s) => s.reviews >= 1 },
+    { id: 'over1', icon: '🦋', name: '苦手克服', hint: '実力チェックで「復習しよう」だった単元を★2にする', ok: (s) => s.overcome >= 1 },
+    { id: 'over5', icon: '🚀', name: '苦手克服 5個', hint: '苦手だった単元を5つ★2にする', ok: (s) => s.overcome >= 5 },
+    { id: 'master', icon: '⭐', name: 'はじめてのマスター', hint: 'どれか1つの単元を★3にする', ok: (s) => s.master >= 1 },
+    { id: 'unit', icon: '🏅', name: '単元制覇', hint: '1つの単元のスキルをすべて★2にする', ok: (s) => s.units >= 1 },
+    { id: 'lv5', icon: '🎖', name: 'レベル5', hint: 'レベル5になる', ok: (s) => s.lv >= 5 },
+  ];
+  function badgeStats() {
+    const sess = st.log.filter((l) => l.mode !== 'diag');
+    return {
+      sessions: sess.length,
+      reviews: st.log.filter((l) => l.mode === 'review').length,
+      perfect: sess.filter((l) => l.q >= PRACTICE_N && l.c === l.q).length,
+      q: totals().q,
+      streak: streak(),
+      overcome: SK.list.filter((s) => sk(s.id).diag === 'ng' && sk(s.id).score >= 70).length,
+      master: SK.list.filter((s) => sk(s.id).score >= 90).length,
+      units: SK.units.filter((u) => u.skills.every((id) => sk(id).score >= 70)).length,
+      lv: levelOf(xp()).lv,
+    };
+  }
+  // 新しく取れたバッジを記録して返す
+  function checkBadges() {
+    const s = badgeStats();
+    const got = BADGES.filter((b) => !st.badges[b.id] && b.ok(s));
+    got.forEach((b) => { st.badges[b.id] = today(); });
+    if (got.length) save();
+    return got;
+  }
+  const badgeChips = (list) => list.map((b) => `<span class="chip">${b.icon} ${esc(b.name)}</span>`).join('');
+
+  // ---------- おすすめ・目標・今日のメニュー ----------
+  // 学ぶ順番（前提から順に。苦手 → 中2 → 残り）
+  function recommendOrder() {
+    const L = SK.list, out = [];
+    const isUntested1 = (s) => s.grade === 1 && sk(s.id).diag === 'untested';
+    const push = (f) => L.forEach((s) => { if (f(s) && !out.includes(s)) out.push(s); });
+    push((s) => sk(s.id).score < 40 && !isUntested1(s));
+    push((s) => s.grade === 2 && sk(s.id).score < 70);
+    push((s) => sk(s.id).score < 70);
+    push((s) => sk(s.id).score < 90);
+    return out;
+  }
+  const recommend = () => recommendOrder()[0] || null;
+  const setsNeeded = (id) => { const v = sk(id).score; return v >= 90 ? 0 : v >= 70 ? 1 : v >= 40 ? 2 : 3; };
+
+  const GOALS = {
+    improve: { icon: '📈', name: '学力アップ', desc: '苦手なところから、自分のペースで力をのばす' },
+    exam: { icon: '📝', name: '定期テスト', desc: 'テストの日と範囲から、毎日のメニューを逆算する' },
+    entrance: { icon: '🎓', name: '高校受験', desc: '中1から全範囲の苦手をなくし、できる所も忘れないよう復習する' },
+  };
+
+  // テスト範囲のスキル（中1の苦手もふくめる設定なら、範囲の単元に直接つながる中1の苦手も入れる）
+  const basePrereqs = (id) => SK.byId[id].prereq.filter((a) => SK.byId[a].grade === 1 && sk(a).score < 40);
+  function examRange(g) {
+    const ids = new Set();
+    g.exam.units.forEach((u) => SK.unitById[u].skills.forEach((id) => ids.add(id)));
+    if (g.exam.base) [...ids].forEach((id) => basePrereqs(id).forEach((a) => ids.add(a)));
+    return SK.list.filter((s) => ids.has(s.id)).map((s) => s.id);
+  }
+  // テストまでの計画：苦手ほど多く、同じ単元はなるべく間をあけてくり返す。最終日は総復習。
+  function examPlan(g) {
+    const range = examRange(g);
+    const left = daysBetween(today(), g.exam.date);                   // 今日〜テスト前日までの日数
+    if (left <= 0) return { range, left, days: [], over: false };
+    const reviewDay = left >= 3;
+    const cap = (left - (reviewDay ? 1 : 0)) * g.daily;
+    // 1巡目：範囲の単元を順に。その直前に、関係する中1の苦手を1回ずつはさむ
+    // 2・3巡目：範囲の単元だけをくり返す（テスト範囲を優先する）
+    const core = SK.list.filter((s) => g.exam.units.includes(s.unit)).map((s) => s.id);
+    const tasks = [], seen = new Set();
+    core.forEach((id) => {
+      if (g.exam.base) basePrereqs(id).forEach((a) => { if (!seen.has(a)) { seen.add(a); tasks.push({ kind: 'skill', id: a }); } });
+      if (setsNeeded(id) >= 1) tasks.push({ kind: 'skill', id });
+    });
+    for (let pass = 2; pass <= 3; pass++) core.forEach((id) => { if (setsNeeded(id) >= pass) tasks.push({ kind: 'skill', id }); });
+    const over = tasks.length > cap;
+    tasks.length = Math.min(tasks.length, cap);
+    const days = [];
+    for (let i = 0; i < left; i++) {
+      const d = addDays(today(), i);
+      let t;
+      if (reviewDay && i === left - 1) t = Array.from({ length: Math.min(g.daily, 2) }, () => ({ kind: 'review', ids: range }));
+      else { t = tasks.slice(i * g.daily, (i + 1) * g.daily); if (!t.length) t = [{ kind: 'review', ids: range }]; }
+      days.push({ d, tasks: t });
+    }
+    return { range, left, days, over };
+  }
+  function buildMenu() {
+    const g = st.goal;
+    if (!g) return [];
+    if (g.type === 'exam') { const p = examPlan(g); return p.days.length ? p.days[0].tasks : []; }
+    const n = g.daily;
+    if (g.type === 'entrance') {
+      const strong = SK.list.filter((s) => sk(s.id).score >= 70).map((s) => s.id);
+      const weak = SK.list.filter((s) => sk(s.id).score < 70).map((s) => s.id);    // 未確認の中1もふくめ、全範囲を前提順に
+      const withReview = strong.length >= 2 && (n >= 2 || !weak.length);
+      const t = weak.slice(0, n - (withReview ? 1 : 0)).map((id) => ({ kind: 'skill', id }));
+      if (withReview) t.push({ kind: 'review', ids: strong });
+      return t;
+    }
+    return recommendOrder().slice(0, n).map((s) => ({ kind: 'skill', id: s.id }));
+  }
+  // 今日のメニューは1日の最初に決めて固定する（途中で点数が変わっても入れかわらない）
+  function todayMenu() {
+    const key = JSON.stringify(st.goal);
+    if (!st.today || st.today.d !== today() || st.today.key !== key) {
+      const tasks = buildMenu();
+      st.today = { d: today(), key, tasks, done: tasks.map(() => false) };
+      save();
+    }
+    return st.today;
+  }
+  const taskName = (t) => (t.kind === 'review' ? `総復習（${REVIEW_N}問）` : SK.byId[t.id].name);
 
   // ---------- 画面切りかえ ----------
   let screen = 'home';
@@ -123,11 +269,44 @@
 <p class="privacy">🔒 記録はこの端末の中だけに保存され、外部には送信されません。</p>`);
   };
 
+  function goalCardHTML() {
+    const g = st.goal, G = GOALS[g.type];
+    let sub = '';
+    if (g.type === 'exam') {
+      const left = daysBetween(today(), g.exam.date);
+      sub = left > 0 ? `<div class="count"><b>${esc(g.exam.name)}</b>まで あと <span>${left}</span> 日</div>`
+        : left === 0 ? `<div class="count"><b>${esc(g.exam.name)}</b>は今日！がんばって！</div>`
+          : `<div class="count small">${esc(g.exam.name)}は終わりました。おつかれさま！次の目標を決めよう。</div>`;
+      sub += `<div class="muted small">範囲：${g.exam.units.map((u) => esc(SK.unitById[u].name)).join('・')}</div>`;
+    } else if (g.type === 'entrance') {
+      const ok = SK.list.filter((s) => sk(s.id).score >= 70).length;
+      sub = `<div class="muted small">土台づくり：★2以上 ${ok} / ${SK.list.length}</div><div class="bar sm"><i style="width:${Math.round((ok / SK.list.length) * 100)}%"></i></div>`;
+    }
+    return `<div class="goalbar"><span class="gi">${G.icon}</span><div class="gt"><div class="small muted">目標：${G.name}</div>${sub}</div>
+<button class="btn small soft" data-go="goal">変更</button></div>`;
+  }
+
+  function menuCardHTML() {
+    const m = todayMenu();
+    if (!m.tasks.length) return '';
+    const done = m.done.filter(Boolean).length, all = m.tasks.length;
+    const finished = done === all;
+    return `<div class="card accent">
+  <div class="row between"><div class="tag">今日のメニュー</div><span class="muted small">${done} / ${all} セット</span></div>
+  <div class="bar"><i style="width:${Math.round((done / all) * 100)}%"></i></div>
+  ${m.tasks.map((t, i) => `<button class="task ${m.done[i] ? 'done' : ''}" data-act="task" data-i="${i}">
+    <span class="ck">${m.done[i] ? '✓' : i + 1}</span><span class="nm">${esc(taskName(t))}${t.kind === 'skill' ? `<small>${SK.byId[t.id].grade === 1 ? '中1の復習' : '中2'}・${stars(sk(t.id).score)}</small>` : '<small>いろいろな単元から出題</small>'}</span>
+    <span class="go">${m.done[i] ? 'もう一度' : 'はじめる ›'}</span></button>`).join('')}
+  ${finished ? '<div class="done-msg">🎉 今日の目標達成！よくがんばったね！</div>' : ''}
+  ${st.goal.type === 'exam' ? '<button class="btn ghost" data-go="plan">テストまでの計画を見る</button>' : ''}
+</div>`;
+  }
+
   SCREENS.home = function () {
     const p = st.profile, s = streak(), t = totals(today());
     const h = new Date().getHours();
     const hello = h < 11 ? 'おはよう' : h < 18 ? 'こんにちは' : 'こんばんは';
-    const mastered = SK.list.filter((x) => sk(x.id).score >= 90).length;
+    const L = levelOf(xp()), wk = weekCompare();
     const total = SK.list.length;
     let main;
     if (!st.diag) {
@@ -137,21 +316,28 @@
   <p>今どこまでわかっているかを確かめて、あなた専用の学習の順番を作ります。約15分。</p>
   <button class="btn primary big" data-act="diagIntro">実力チェックをはじめる</button>
 </div>`;
-    } else {
+    } else if (!st.goal) {
       const r = recommend();
-      main = r ? `<div class="card accent">
-  <div class="tag">今日のおすすめ</div>
-  <h2>${esc(r.name)}</h2>
-  <p class="muted">${r.grade === 1 ? '中1の復習' : '中2'}・${esc(SK.unitById[r.unit].name)}　${stars(sk(r.id).score)}</p>
-  <button class="btn primary big" data-act="lesson" data-id="${r.id}">はじめる（${PRACTICE_N}問）</button>
-</div>` : `<div class="card accent"><h2>🎉 全スキル マスター！</h2><p>すごい！好きな単元で腕だめししよう。</p></div>`;
+      main = `<div class="card accent">
+  <div class="tag">STEP 2</div>
+  <h2>目標を決めよう</h2>
+  <p>「学力アップ」「定期テスト」「高校受験」から選ぶと、毎日のメニューを作ります。</p>
+  <button class="btn primary big" data-go="goal">目標を決める</button>
+</div>
+${r ? `<div class="card"><div class="tag">おすすめ</div><h3>${esc(r.name)}</h3><button class="btn soft" data-act="lesson" data-id="${r.id}">はじめる（${PRACTICE_N}問）</button></div>` : ''}`;
+    } else {
+      const menu = menuCardHTML();
+      const r = recommend();
+      main = goalCardHTML() + (menu || (r ? `<div class="card accent"><div class="tag">おすすめ</div><h2>${esc(r.name)}</h2>
+<button class="btn primary big" data-act="lesson" data-id="${r.id}">はじめる（${PRACTICE_N}問）</button></div>` : `<div class="card accent"><h2>🎉 全スキル マスター！</h2><p>すごい！好きな単元で腕だめししよう。</p></div>`));
     }
     render(`
 <div class="greet">${hello}、<b>${esc(p.name)}</b> さん</div>
+<div class="lvcard"><div class="lv">Lv.${L.lv}</div><div class="lvt"><b>${esc(L.title)}</b><div class="bar sm"><i style="width:${L.pct}%"></i></div><span class="muted small">次のレベルまで ${L.rest} pt</span></div></div>
 <div class="stats">
   <div class="stat"><div class="v">🔥 ${s}</div><div class="k">日連続</div></div>
   <div class="stat"><div class="v">${t.q}</div><div class="k">今日の問題</div></div>
-  <div class="stat"><div class="v">${mastered}<small>/${total}</small></div><div class="k">マスター</div></div>
+  <div class="stat"><div class="v">${wk.now}</div><div class="k">今週の問題${wk.last ? `<br><span class="${wk.now >= wk.last ? 'up' : ''}">先週 ${wk.last}</span>` : ''}</div></div>
 </div>
 ${main}
 <div class="card">
@@ -163,6 +349,68 @@ ${main}
   }).join('')}
 </div>
 <p class="tip">💡 ${pick(MSG.tips)}</p>`);
+  };
+
+  // ----- 目標の設定 -----
+  let G = null; // 設定中の目標
+  function goalDraft() {
+    const g = st.goal ? JSON.parse(JSON.stringify(st.goal)) : { type: 'improve', daily: 2 };
+    g.exam = g.exam || { name: '中間テスト', date: addDays(today(), 14), units: [], base: true };
+    return g;
+  }
+  function readGoalForm() {
+    const nm = document.getElementById('exname'), dt = document.getElementById('exdate');
+    if (nm) G.exam.name = nm.value;
+    if (dt) G.exam.date = dt.value;
+  }
+  SCREENS.goal = function (keep) {
+    if (!keep || !G) G = goalDraft();
+    const e = G.exam;
+    render(`
+<button class="back" data-go="home">‹ ホーム</button>
+<h1 class="page-h">目標を決める</h1>
+<div class="card">
+  <div class="lbl">目的</div>
+  ${Object.keys(GOALS).map((k) => `<button class="gopt ${G.type === k ? 'on' : ''}" data-act="goalType" data-k="${k}"><span class="gi">${GOALS[k].icon}</span><span><b>${GOALS[k].name}</b><small>${GOALS[k].desc}</small></span></button>`).join('')}
+  <div class="lbl">1日の目標</div>
+  <div class="seg three">${[1, 2, 3].map((n) => `<button class="${G.daily === n ? 'on' : ''}" data-act="goalDaily" data-n="${n}">${n}セット<small>約${n * 10}分</small></button>`).join('')}</div>
+</div>
+${G.type === 'exam' ? `<div class="card">
+  <div class="lbl">テスト</div>
+  <div class="seg two">${['中間テスト', '期末テスト'].map((n) => `<button class="${e.name === n ? 'on' : ''}" data-act="goalExName" data-n="${n}">${n}</button>`).join('')}</div>
+  <input type="hidden" id="exname" value="${esc(e.name)}">
+  <label class="lbl" for="exdate">テストの日</label>
+  <input type="date" id="exdate" class="inp" value="${esc(e.date)}" min="${addDays(today(), 1)}">
+  <div class="lbl">テスト範囲（数学）</div>
+  <div class="units">${SK.units.filter((u) => u.grade === 2).map((u) => `<button class="uopt ${e.units.includes(u.id) ? 'on' : ''}" data-act="goalUnit" data-u="${u.id}">${e.units.includes(u.id) ? '☑' : '☐'} ${esc(u.name)}</button>`).join('')}</div>
+  <button class="uopt wide ${e.base ? 'on' : ''}" data-act="goalBase">${e.base ? '☑' : '☐'} 中1の苦手もいっしょに復習する</button>
+  <p class="note">範囲は、学校で配られるテスト範囲の表を見て選んでください。</p>
+</div>` : ''}
+<button class="btn primary big" data-act="goalSave">この目標で決定</button>
+${st.goal ? '<button class="btn ghost" data-act="goalClear">目標を設定しない</button>' : ''}`);
+  };
+
+  // 同じ内容が続く行は「× 2」にまとめる
+  function planLines(tasks) {
+    const names = tasks.map(taskName), out = [];
+    names.forEach((n) => { const last = out[out.length - 1]; if (last && last.n === n) last.k++; else out.push({ n, k: 1 }); });
+    return out.map((x) => esc(x.n) + (x.k > 1 ? ' × ' + x.k : '')).join('<br>');
+  }
+  // ----- テストまでの計画 -----
+  SCREENS.plan = function () {
+    const g = st.goal;
+    if (!g || g.type !== 'exam') return go('home');
+    const p = examPlan(g);
+    render(`
+<button class="back" data-go="home">‹ ホーム</button>
+<h1 class="page-h">${esc(g.exam.name)}までの計画</h1>
+<p class="muted small">毎日の練習の結果に合わせて、計画は自動で調整されます。</p>
+${p.over ? `<div class="card warn">⏰ 全部を回るには日数が足りないので、<b>苦手なところを優先</b>しています。1日のセット数を増やすと、もっと回れます。</div>` : ''}
+<div class="card">
+${p.days.map((d, i) => `<div class="pday ${i === 0 ? 'now' : ''}"><div class="pd">${i === 0 ? '今日' : fmtDay(d.d)}</div><div class="pt">${planLines(i === 0 ? todayMenu().tasks : d.tasks)}</div></div>`).join('')}
+<div class="pday exam"><div class="pd">${fmtDay(g.exam.date)}</div><div class="pt">📝 <b>${esc(g.exam.name)} 本番</b></div></div>
+</div>
+<div class="card"><b>範囲のスキル</b>${p.range.map((id) => `<div class="mini"><span class="wide">${esc(SK.byId[id].name)}</span>${stars(sk(id).score)}</div>`).join('')}</div>`);
   };
 
   // ----- 実力チェック -----
@@ -182,6 +430,7 @@ ${main}
   };
 
   let D = null; // 実力チェック中の状態
+  let newBadges = []; // 直前に取れたバッジ（結果画面で表示）
   function diagStart() {
     D = { queue: SK.list.filter((s) => s.grade === 2).map((s) => s.id), tested: {}, start: Date.now(), cur: null, items: [] };
     nextDiag();
@@ -226,8 +475,10 @@ ${main}
     const sec = Math.round((Date.now() - D.start) / 1000);
     st.diag = { date: today(), results, items: D.items };
     st.log.push({ d: today(), t: Date.now(), mode: 'diag', skill: null, q: n, c, sec });
+    st.today = null; // 結果に合わせて今日のメニューを作り直す
     save();
     D = null;
+    newBadges = checkBadges();
     go('diagResult');
   }
 
@@ -236,13 +487,16 @@ ${main}
     const ok = SK.list.filter((s) => res[s.id] === 'ok' || res[s.id] === 'inferred').length;
     const r = recommend();
     const mark = { ok: ['◎', 'できている', 'ok'], inferred: ['○', 'たぶんOK', 'inf'], ng: ['！', '復習しよう', 'ng'], untested: ['−', '未確認', 'un'] };
+    const nb = newBadges; newBadges = [];
     render(`
 <div class="card accent center">
   <div class="big-emoji">🎯</div>
   <h2>実力チェック完了！</h2>
   ${ok ? `<p>できていることが <b class="hl">${ok}個</b> 見つかりました。</p>` : '<p>おつかれさま！ここからが本当のスタート。<br>一歩ずつ、ぐんぐん伸ばしていこう！</p>'}
   <p class="muted">「！」の単元を伸ばしていけば、もっと解けるようになります。</p>
+  ${nb.length ? `<div class="newbadge">🏅 バッジ獲得！<div>${badgeChips(nb)}</div></div>` : ''}
 </div>
+${st.goal ? '' : `<div class="card"><div class="tag">次はここ</div><h3>目標を決めよう</h3><p class="muted small">目的に合わせて、毎日のメニューを作ります。</p><button class="btn primary big" data-go="goal">目標を決める</button></div>`}
 ${SK.units.map((u) => `
 <div class="card">
   <div class="unit-h">${u.grade === 1 ? '中1' : '中2'}・${esc(u.name)}</div>
@@ -254,7 +508,7 @@ ${st.diag.items && st.diag.items.length ? `<div class="card">
   <div class="row"><button class="btn soft" data-act="review" data-f="all">全問（${st.diag.items.length}問）</button>
   <button class="btn soft" data-act="review" data-f="ng">まちがえた問題（${st.diag.items.filter((x) => !x.ok).length}問）</button></div>
 </div>` : ''}
-${r ? `<div class="card"><div class="tag">まずはここから</div><h3>${esc(r.name)}</h3><button class="btn primary big" data-act="lesson" data-id="${r.id}">学習をはじめる</button></div>` : ''}
+${r && st.goal ? `<div class="card"><div class="tag">まずはここから</div><h3>${esc(r.name)}</h3><button class="btn primary big" data-act="lesson" data-id="${r.id}">学習をはじめる</button></div>` : ''}
 <button class="btn ghost" data-go="home">ホームへ</button>`);
   };
 
@@ -278,9 +532,11 @@ ${items.length ? items.map((x) => { const s = SK.byId[x.skill]; return `
   // ----- 単元マップ -----
   SCREENS.map = function () {
     const r = recommend();
+    const strong = SK.list.filter((s) => sk(s.id).score >= 40).map((s) => s.id);
     render(`
 <h1 class="page-h">単元マップ</h1>
 <p class="muted small">★1：基本OK　★2：しっかり　★3：マスター</p>
+${strong.length >= 2 ? `<button class="btn soft" data-act="reviewStart" data-ids="${strong.join(',')}">🔁 総復習（★1以上の単元から${REVIEW_N}問）</button>` : ''}
 ${[2, 1].map((g) => `
 <h2 class="grade-h">${g === 2 ? '中学2年' : '中学1年（復習）'}</h2>
 ${SK.units.filter((u) => u.grade === g).map((u) => `
@@ -308,7 +564,7 @@ ${pre.length ? `<div class="card warn">💡 先に <b>${pre.map((p) => esc(SK.by
 <button class="btn primary big" data-act="practice" data-id="${id}">練習する（${PRACTICE_N}問）</button>`);
   };
 
-  // ----- 問題（練習・実力チェック共通） -----
+  // ----- 問題（練習・総復習・実力チェック共通） -----
   let P = null;
   function newQ(base) {
     const q = base.skill.gen();
@@ -334,10 +590,16 @@ ${pre.length ? `<div class="card warn">💡 先に <b>${pre.map((p) => esc(SK.by
     const m = t.match(/^(−?)(\d+)\/(\d+)$/);
     return m ? m[1] + '<span class="fr"><span>' + m[2] + '</span><span>' + m[3] + '</span></span>' : esc(t);
   }
+
   let S = null; // 練習セッション
-  function practiceStart(id) {
-    S = { skill: SK.byId[id], i: 0, results: [], start: Date.now(), before: sk(id).score };
-    P = newQ({ mode: 'practice', skill: S.skill });
+  // ids が1つなら通常の練習（5問）、複数なら総復習（いろいろな単元から10問）
+  function startSession(ids) {
+    const mixed = ids.length > 1, n = mixed ? REVIEW_N : PRACTICE_N;
+    let order = [];
+    while (order.length < n) order = order.concat(shuffle(ids));
+    const before = {}; ids.forEach((id) => { before[id] = sk(id).score; });
+    S = { ids, mixed, n, order: order.slice(0, n), i: 0, results: [], start: Date.now(), before, lvBefore: levelOf(xp()).lv };
+    P = newQ({ mode: 'practice', skill: SK.byId[S.order[0]] });
     go('practice');
   }
 
@@ -352,9 +614,9 @@ ${pre.length ? `<div class="card warn">💡 先に <b>${pre.map((p) => esc(SK.by
 <div class="muted small">${P.skill.grade === 1 ? '中1さかのぼり' : '中2'}・${esc(SK.unitById[P.skill.unit].name)}</div>`;
     } else {
       head = `<div class="qhead"><button class="x" data-act="quitPractice" aria-label="やめる">×</button>
-<div class="dots">${Array.from({ length: PRACTICE_N }, (_, k) => `<i class="${k < S.results.length ? (S.results[k] ? 'ok' : 'ng') : k === S.i ? 'cur' : ''}"></i>`).join('')}</div>
-<span>${S.i + 1}/${PRACTICE_N}</span></div>
-<div class="muted small">${esc(P.skill.name)}</div>`;
+<div class="dots">${Array.from({ length: S.n }, (_, k) => `<i class="${k < S.results.length ? (S.results[k] ? 'ok' : 'ng') : k === S.i ? 'cur' : ''}"></i>`).join('')}</div>
+<span>${S.i + 1}/${S.n}</span></div>
+<div class="muted small">${S.mixed ? '総復習・' : ''}${esc(P.skill.name)}</div>`;
     }
     const body = `<div class="card qcard"><div class="q">${q.q}</div>${q.form ? `<div class="form">答えの形：${q.form}</div>` : ''}</div>`;
     let input = '';
@@ -389,7 +651,7 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
     let fb = '', actions = '';
     if (P.feedback) fb = `<div class="fb ${P.feedback.type}">${P.feedback.html}</div>`;
     if (P.done) {
-      actions = `<button class="btn primary big" data-act="next">${isDiag ? '次へ' : S.i + 1 >= PRACTICE_N ? '結果を見る' : '次の問題へ'}</button>`;
+      actions = `<button class="btn primary big" data-act="next">${isDiag ? '次へ' : S.i + 1 >= S.n ? '結果を見る' : '次の問題へ'}</button>`;
     } else if (isDiag) {
       actions = `${q.choices ? '' : '<button class="btn primary big" data-act="check">答える</button>'}<button class="btn ghost" data-act="dunno">わからない</button>`;
     } else {
@@ -471,13 +733,13 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
       if (P.hint === 0) P.hint = 1;
       P.feedback = { type: 'retry', html: `<div class="fb-h">🤔 ${pick(MSG.retry)}</div>` };
     } else {
-      reveal(true);
+      reveal();
       return;
     }
     rerender();
   }
 
-  function reveal(afterWrong) {
+  function reveal() {
     finishQ(false, -5);
     P.feedback = { type: 'ng', html: `<div class="fb-h">📘 ${pick(MSG.giveup)}</div><div class="ans">答え：${answerText()}</div><div class="exp">${P.q.explain}</div>` };
     rerender();
@@ -500,51 +762,80 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
   function next() {
     if (P.mode === 'diag') return nextDiag();
     S.i++;
-    if (S.i >= PRACTICE_N) return finishPractice();
-    P = newQ({ mode: 'practice', skill: S.skill });
+    if (S.i >= S.n) return finishPractice();
+    P = newQ({ mode: 'practice', skill: SK.byId[S.order[S.i]] });
     rerender();
     window.scrollTo(0, 0);
   }
 
   function finishPractice() {
     const c = S.results.filter(Boolean).length, sec = Math.round((Date.now() - S.start) / 1000);
-    st.log.push({ d: today(), t: Date.now(), mode: 'practice', skill: S.skill.id, q: S.results.length, c, sec });
+    st.log.push({ d: today(), t: Date.now(), mode: S.mixed ? 'review' : 'practice', skill: S.mixed ? null : S.ids[0], q: S.results.length, c, sec });
+    // 今日のメニューにチェック（最後まで解いたときだけ）
+    S.menuDone = false;
+    if (st.goal && S.results.length === S.n) {
+      const m = todayMenu();
+      const i = m.tasks.findIndex((t, k) => !m.done[k] && (S.mixed ? t.kind === 'review' : t.kind === 'skill' && t.id === S.ids[0]));
+      if (i >= 0) {
+        m.done[i] = true;
+        if (m.done.every(Boolean) && !st.goalDays.includes(today())) { st.goalDays.push(today()); S.menuDone = true; }
+      }
+    }
     save();
+    S.badges = checkBadges();
+    S.lvAfter = levelOf(xp()).lv;
     go('summary');
   }
 
   SCREENS.summary = function () {
     const c = S.results.filter(Boolean).length, n = S.results.length;
-    const after = sk(S.skill.id).score, before = S.before;
-    const up = starsOf(after) > starsOf(before);
     const msg = c === n ? '全問正解！完ぺきです！' : c >= n - 1 ? 'すばらしい！あと少しで完ぺき！' : c >= n / 2 ? 'いい調子！くり返すともっと伸びるよ' : 'チャレンジしたことが一番大事。解説を見て、もう1セットやってみよう';
+    let detail;
+    if (S.mixed) {
+      const ups = S.ids.filter((id) => starsOf(sk(id).score) > starsOf(S.before[id]));
+      detail = ups.length ? `<div class="levelup">⭐ ${ups.map((id) => esc(SK.byId[id].name)).join('、')} の★が上がった！</div>` : '';
+    } else {
+      const id = S.ids[0], after = sk(id).score, before = S.before[id];
+      const up = starsOf(after) > starsOf(before);
+      detail = `${up ? `<div class="levelup">⭐ ★アップ！ ${stars(after)}</div>` : `<div>${stars(after)}</div>`}
+  <div class="bar"><i style="width:${after}%"></i></div>
+  <p class="muted small">${esc(SK.byId[id].name)}　習熟度 ${after > before ? `${before} → <b>${after}</b>` : after}</p>`;
+    }
+    const L = levelOf(xp());
+    const m = st.goal ? todayMenu() : null;
+    const nextTask = m ? m.tasks.findIndex((t, k) => !m.done[k]) : -1;
     const r = recommend();
     render(`
+${S.menuDone ? '<div class="card celebrate center"><div class="big-emoji">🎉</div><h2>今日の目標達成！</h2><p>よくがんばったね！この調子で続けよう。</p></div>' : ''}
 <div class="card accent center">
   <div class="big-emoji">${c === n ? '🏆' : c >= n / 2 ? '✨' : '🌱'}</div>
-  <h2>${c} / ${n} 問正解</h2>
+  <h2>${S.mixed ? '総復習　' : ''}${c} / ${n} 問正解</h2>
   <p>${msg}</p>
-  ${up ? `<div class="levelup">⭐ レベルアップ！ ${stars(after)}</div>` : `<div>${stars(after)}</div>`}
-  <div class="bar"><i style="width:${after}%"></i></div>
-  <p class="muted small">${esc(S.skill.name)}　習熟度 ${after > before ? `${before} → <b>${after}</b>` : after}</p>
+  ${detail}
+  ${S.lvAfter > S.lvBefore ? `<div class="levelup big">🎊 レベルアップ！ Lv.${L.lv}「${esc(L.title)}」</div>` : ''}
+  ${S.badges.length ? `<div class="newbadge">🏅 バッジ獲得！<div>${badgeChips(S.badges)}</div></div>` : ''}
   <p class="muted small">🔥 ${streak()}日連続で学習中</p>
 </div>
-<button class="btn primary big" data-act="practice" data-id="${S.skill.id}">もう1セット</button>
-${r && r.id !== S.skill.id ? `<button class="btn soft big" data-act="lesson" data-id="${r.id}">次のおすすめ：${esc(r.name)}</button>` : ''}
+${nextTask >= 0 ? `<button class="btn primary big" data-act="task" data-i="${nextTask}">次のメニュー：${esc(taskName(m.tasks[nextTask]))}</button>` : ''}
+<button class="btn ${nextTask >= 0 ? 'soft' : 'primary'} big" data-act="again">もう1セット</button>
+${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft big" data-act="lesson" data-id="${r.id}">おすすめ：${esc(r.name)}</button>` : ''}
 <button class="btn ghost" data-go="home">ホームへ</button>`);
   };
 
   // ----- 学習記録 -----
   SCREENS.records = function () {
-    const all = totals(), s = streak();
+    const all = totals(), s = streak(), L = levelOf(xp());
     const days = []; const d = new Date(); d.setDate(d.getDate() - 13);
     for (let i = 0; i < 14; i++) { const k = dayStr(d); days.push({ k, label: (d.getMonth() + 1) + '/' + d.getDate(), q: totals(k).q }); d.setDate(d.getDate() + 1); }
     const max = Math.max(5, ...days.map((x) => x.q));
     const practiced = SK.list.filter((x) => sk(x.id).q > 0 || sk(x.id).diag);
     const logs = st.log.slice().reverse().slice(0, 30);
+    const got = BADGES.filter((b) => st.badges[b.id]).length;
+    const logName = (l) => (l.mode === 'diag' ? '実力チェック' : l.mode === 'review' ? '総復習' : esc(SK.byId[l.skill] ? SK.byId[l.skill].name : ''));
     render(`
 <h1 class="page-h">学習の記録</h1>
 <div class="print-only print-head">まなびステップ 学習記録　${esc(st.profile.name)} さん（中学2年・数学）　${today()} 出力</div>
+<div class="lvcard"><div class="lv">Lv.${L.lv}</div><div class="lvt"><b>${esc(L.title)}</b><div class="bar sm"><i style="width:${L.pct}%"></i></div><span class="muted small">合計 ${xp()} pt・次のレベルまで ${L.rest} pt</span></div></div>
 <div class="stats">
   <div class="stat"><div class="v">🔥 ${s}</div><div class="k">日連続</div></div>
   <div class="stat"><div class="v">${all.q}</div><div class="k">解いた問題</div></div>
@@ -552,8 +843,15 @@ ${r && r.id !== S.skill.id ? `<button class="btn soft big" data-act="lesson" dat
   <div class="stat"><div class="v">${fmtMin(all.sec)}</div><div class="k">学習時間</div></div>
 </div>
 <div class="card">
+  <div class="row between"><b>バッジ</b><span class="muted small">${got} / ${BADGES.length}</span></div>
+  <div class="badges">${BADGES.map((b) => st.badges[b.id]
+    ? `<div class="badge got"><span>${b.icon}</span><b>${esc(b.name)}</b><small>${st.badges[b.id].slice(5).replace('-', '/')}</small></div>`
+    : `<div class="badge"><span>🔒</span><b>${esc(b.name)}</b><small>${esc(b.hint)}</small></div>`).join('')}</div>
+</div>
+<div class="card">
   <b>この2週間</b>
-  <div class="chart">${days.map((x) => `<div class="col"><div class="b" style="height:${Math.round((x.q / max) * 100)}%" title="${x.q}問"></div><span>${x.label.split('/')[1]}</span></div>`).join('')}</div>
+  <div class="chart">${days.map((x) => `<div class="col"><div class="b ${st.goalDays.includes(x.k) ? 'goal' : ''}" style="height:${Math.round((x.q / max) * 100)}%" title="${x.q}問"></div><span>${x.label.split('/')[1]}</span></div>`).join('')}</div>
+  <p class="note">緑の日は「今日のメニュー」を達成した日（達成 ${st.goalDays.length}日）</p>
 </div>
 <div class="card">
   <b>スキルの伸び</b>
@@ -562,7 +860,7 @@ ${r && r.id !== S.skill.id ? `<button class="btn soft big" data-act="lesson" dat
 </div>
 <div class="card">
   <b>最近の学習</b>
-  ${logs.length ? logs.map((l) => `<div class="log"><span class="muted">${l.d.slice(5).replace('-', '/')}</span><span>${l.mode === 'diag' ? '実力チェック' : esc(SK.byId[l.skill] ? SK.byId[l.skill].name : '')}</span><span>${l.c}/${l.q}</span></div>`).join('') : '<p class="muted">まだ記録がありません</p>'}
+  ${logs.length ? logs.map((l) => `<div class="log"><span class="muted">${l.d.slice(5).replace('-', '/')}</span><span>${logName(l)}</span><span>${l.c}/${l.q}</span></div>`).join('') : '<p class="muted">まだ記録がありません</p>'}
 </div>
 <div class="card no-print">
   <b>保存・出力</b>
@@ -573,6 +871,7 @@ ${r && r.id !== S.skill.id ? `<button class="btn soft big" data-act="lesson" dat
 </div>
 <div class="card no-print">
   <b>設定</b>
+  <button class="btn soft" data-go="goal">目標を${st.goal ? '変更' : '決める'}</button>
   <button class="btn soft" data-act="rename">ニックネームを変更</button>
   ${st.diag ? '<button class="btn soft" data-go="diagResult">前回の実力チェックの結果・解説</button>' : ''}
   <button class="btn soft" data-act="diagIntro">実力チェックをやり直す</button>
@@ -596,8 +895,8 @@ ${r && r.id !== S.skill.id ? `<button class="btn soft big" data-act="lesson" dat
   <p>この端末に保存されている、次のデータをすべて削除して最初の状態に戻します。</p>
   <ul class="list">
     <li>ニックネーム（${esc(st.profile ? st.profile.name : '')}）</li>
-    <li>実力チェックの結果</li>
-    <li>学習の記録（${t.q}問・${streak()}日連続）</li>
+    <li>実力チェックの結果、目標</li>
+    <li>学習の記録（${t.q}問・${streak()}日連続）、レベル、バッジ</li>
   </ul>
   <p class="muted small">削除すると元に戻せません。残しておきたい場合は、先に「記録」→「バックアップを保存」をしてください。</p>
 </div>
@@ -661,18 +960,58 @@ ${cancel}
     diagIntro: () => go('diagIntro'),
     diagStart,
     lesson: (d) => go('lesson', d.id),
-    practice: (d) => practiceStart(d.id),
+    practice: (d) => startSession([d.id]),
+    reviewStart: (d) => startSession(d.ids.split(',')),
+    again: () => startSession(S.ids),
+    task: (d) => {
+      const t = todayMenu().tasks[Number(d.i)];
+      if (!t) return go('home');
+      if (t.kind === 'review') startSession(t.ids.length > 1 ? t.ids : SK.list.map((s) => s.id));
+      else go('lesson', t.id);
+    },
     key: (d) => key(d.k),
     focus: (d) => { if (!P.done) { P.active = Number(d.k); rerender(); } },
     check,
     choose: (d) => { if (!P.done) choose(Number(d.k)); },
     hint: () => { P.hint = Math.min(P.hint + 1, P.q.hints.length); rerender(); },
-    reveal: () => reveal(false),
+    reveal: () => reveal(),
     dunno: () => { log1(false); diagRecord(false, true); diagAnswer(false); },
     review: (d) => go('diagReview', d.f || 'all'),
     next,
-    quitPractice: () => { if (confirm('練習をやめますか？（ここまでの結果は残ります）')) { if (S.results.length) finishPractice(); else go('lesson', S.skill.id); } },
+    quitPractice: () => {
+      if (!confirm('練習をやめますか？（ここまでの結果は残ります）')) return;
+      if (S.results.length) finishPractice(); else if (S.mixed) go('home'); else go('lesson', S.ids[0]);
+    },
     quitDiag: () => { if (confirm('実力チェックをやめますか？（結果は保存されません）')) { D = null; go('home'); } },
+    // 目標の設定
+    goalType: (d) => { readGoalForm(); G.type = d.k; go('goal', true); },
+    goalDaily: (d) => { readGoalForm(); G.daily = Number(d.n); go('goal', true); },
+    goalExName: (d) => { readGoalForm(); G.exam.name = d.n; go('goal', true); },
+    goalUnit: (d) => {
+      readGoalForm();
+      const u = G.exam.units, i = u.indexOf(d.u);
+      if (i >= 0) u.splice(i, 1); else u.push(d.u);
+      go('goal', true);
+    },
+    goalBase: () => { readGoalForm(); G.exam.base = !G.exam.base; go('goal', true); },
+    goalSave: () => {
+      readGoalForm();
+      if (G.type === 'exam') {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(G.exam.date || '')) return toast('テストの日を入れてね');
+        if (daysBetween(today(), G.exam.date) < 1) return toast('テストの日は明日以降にしてね');
+        if (!G.exam.units.length) return toast('テスト範囲を1つ以上選んでね');
+      }
+      const g = { type: G.type, daily: G.daily };
+      if (G.type === 'exam') g.exam = { name: G.exam.name, date: G.exam.date, units: SK.units.filter((u) => G.exam.units.includes(u.id)).map((u) => u.id), base: G.exam.base };
+      st.goal = g; st.today = null; save(); G = null;
+      checkBadges();
+      toast('目標を決めました。今日のメニューを作りました！');
+      go('home');
+    },
+    goalClear: () => {
+      if (!confirm('目標の設定をやめますか？（学習の記録は消えません）')) return;
+      st.goal = null; st.today = null; save(); G = null; go('home');
+    },
     print: () => window.print(),
     export: exportFile,
     rename: () => go('setup'),

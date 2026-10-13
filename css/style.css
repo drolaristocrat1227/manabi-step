@@ -231,3 +231,60 @@ label.btn { cursor: pointer; }
 .more summary { cursor: pointer; display: inline-block; padding: 6px 12px; list-style: none; opacity: .7; }
 .more summary::-webkit-details-marker { display: none; }
 .linkish { display: block; margin: 6px auto 0; background: none; border: 0; color: var(--muted); text-decoration: underline; font-size: .8rem; padding: 6px; }
+
+/* レベル */
+.lvcard { display: flex; align-items: center; gap: 12px; background: var(--card); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(20, 30, 60, .06); }
+.lv { flex: none; width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: var(--primary-ink); font-weight: 800; font-size: .95rem; }
+.lvt { flex: 1; min-width: 0; }
+.lvt .bar { margin: 4px 0 2px; }
+.stat .k .up { color: var(--ok); }
+
+/* 目標 */
+.goalbar { display: flex; align-items: center; gap: 10px; background: var(--card); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(20, 30, 60, .06); }
+.goalbar .gi, .gopt .gi { font-size: 1.6rem; flex: none; }
+.goalbar .gt { flex: 1; min-width: 0; }
+.goalbar .btn { flex: none; margin: 0; }
+.count { font-size: 1rem; }
+.count span { font-size: 1.6rem; font-weight: 800; color: var(--primary); margin: 0 2px; }
+.gopt { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; border: 2px solid var(--line); background: var(--card); border-radius: 14px; padding: 12px; margin-bottom: 8px; }
+.gopt small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.4; }
+.gopt.on { border-color: var(--primary); background: var(--soft); }
+.seg.three { grid-template-columns: repeat(3, 1fr); }
+.units { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.uopt { border: 2px solid var(--line); background: var(--card); border-radius: 12px; padding: 10px; font-weight: 600; text-align: left; }
+.uopt.on { border-color: var(--primary); background: var(--soft); color: var(--primary); }
+.uopt.wide { width: 100%; margin-top: 8px; }
+
+/* 今日のメニュー */
+.task { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: var(--card); border: 0; border-radius: 12px; padding: 12px; margin-top: 8px; box-shadow: 0 1px 2px rgba(20, 30, 60, .08); }
+.task .ck { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--soft); color: var(--primary); font-weight: 800; }
+.task .nm { flex: 1; font-weight: 700; }
+.task .nm small { display: block; font-weight: 400; font-size: .75rem; color: var(--muted); }
+.task .go { flex: none; font-size: .85rem; color: var(--primary); font-weight: 700; }
+.task.done .ck { background: var(--ok); color: #fff; }
+.task.done .nm { color: var(--muted); text-decoration: line-through; }
+.task.done .go { color: var(--muted); font-weight: 400; }
+.done-msg { margin-top: 12px; text-align: center; font-weight: 800; color: var(--ok); }
+.celebrate { background: var(--ok-bg); }
+
+/* 計画表 */
+.pday { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.pday:first-child { border-top: 0; }
+.pday .pd { flex: none; width: 5.5em; font-weight: 700; font-size: .9rem; }
+.pday .pt { flex: 1; font-size: .9rem; }
+.pday.now .pd { color: var(--primary); }
+.pday.exam { background: var(--warn-bg); border-radius: 10px; padding: 10px; margin-top: 4px; }
+.mini .wide { width: auto; flex: 1; }
+
+/* バッジ */
+.chip { display: inline-block; background: var(--card); border-radius: 99px; padding: 4px 12px; margin: 4px 3px 0; font-size: .85rem; font-weight: 700; box-shadow: 0 1px 2px rgba(20, 30, 60, .12); }
+.newbadge { margin-top: 10px; font-weight: 800; color: var(--star); }
+.levelup.big { font-size: 1.2rem; color: var(--primary); }
+.badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-top: 10px; }
+.badge { text-align: center; border-radius: 12px; padding: 10px 6px; background: var(--bg); opacity: .6; }
+.badge span { display: block; font-size: 1.6rem; line-height: 1.2; filter: grayscale(1); }
+.badge b { display: block; font-size: .75rem; line-height: 1.3; margin-top: 4px; }
+.badge small { display: block; font-size: .65rem; color: var(--muted); line-height: 1.3; margin-top: 2px; }
+.badge.got { opacity: 1; background: var(--warn-bg); }
+.badge.got span { filter: none; }
+.chart .b.goal { background: var(--ok); }
