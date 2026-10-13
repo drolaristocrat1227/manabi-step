@@ -1,7 +1,7 @@
 {
   "name": "まなびステップ",
   "short_name": "まなびステップ",
-  "description": "中学生向けの学習アプリ（中2数学）",
+  "description": "小中学生向けの学習アプリ（小6算数・中2の5教科）",
   "lang": "ja",
   "id": "./",
   "start_url": "./index.html",
