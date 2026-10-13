@@ -3,7 +3,7 @@
   "short_name": "まなびステップ",
   "description": "中学生向けの学習アプリ（中2数学）",
   "lang": "ja",
-  "id": "/manabi-step",
+  "id": "./",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
