@@ -1,5 +1,5 @@
 /*
- * 中2数学 スキル定義
+ * 中2数学 スキル定義（数と式・関数・図形・データ・確率）
  * 問題はすべてプログラムで自動生成し、答えは計算で求める（正解の誤りが起きない）。
  * prereq は「その前に身についていてほしいスキル」。実力チェックのさかのぼりと学習順に使う。
  */
@@ -496,6 +496,409 @@
     },
   });
 
+  // ---------- 図（SVG）：角度などの数値と図の形を一致させて描く ----------
+  const f1 = (n) => Math.round(n * 10) / 10;
+  const RAD = Math.PI / 180;
+  // 点の集まりがちょうど入るように表示範囲を決める
+  function fig(pts, body, padX = 34, padY = 30) {
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const x0 = Math.min(...xs) - padX, y0 = Math.min(...ys) - padY, w = Math.max(...xs) - Math.min(...xs) + padX * 2, h = Math.max(...ys) - Math.min(...ys) + padY * 2;
+    return `<svg class="fig" viewBox="${f1(x0)} ${f1(y0)} ${f1(w)} ${f1(h)}" role="img" aria-label="図">${body}</svg>`;
+  }
+  const ln = (a, b, cls = '') => `<line x1="${f1(a[0])}" y1="${f1(a[1])}" x2="${f1(b[0])}" y2="${f1(b[1])}" class="${cls}"/>`;
+  const pg = (pts, cls = '') => `<polygon points="${pts.map((p) => f1(p[0]) + ',' + f1(p[1])).join(' ')}" class="${cls}"/>`;
+  const tx = (p, s, cls = '') => `<text x="${f1(p[0])}" y="${f1(p[1])}" text-anchor="middle" dominant-baseline="central" class="${cls}">${s}</text>`;
+  const add2 = (a, b, k = 1) => [a[0] + b[0] * k, a[1] + b[1] * k];
+  // 頂点 v で、点 p1 の方向から点 p2 の方向への角の印と文字
+  function ang(v, p1, p2, label, cls = '', r = 22) {
+    const a1 = Math.atan2(p1[1] - v[1], p1[0] - v[0]), a2 = Math.atan2(p2[1] - v[1], p2[0] - v[0]);
+    let d = a2 - a1; while (d <= -Math.PI) d += 2 * Math.PI; while (d > Math.PI) d -= 2 * Math.PI;
+    const s = [v[0] + r * Math.cos(a1), v[1] + r * Math.sin(a1)], e = [v[0] + r * Math.cos(a1 + d), v[1] + r * Math.sin(a1 + d)];
+    const m = a1 + d / 2, lr = r + 15 + (Math.abs(d) < 0.8 ? 10 : 0);
+    return `<path d="M${f1(s[0])} ${f1(s[1])} A${r} ${r} 0 0 ${d > 0 ? 1 : 0} ${f1(e[0])} ${f1(e[1])}" class="arc ${cls}"/>`
+      + (label ? tx([v[0] + lr * Math.cos(m), v[1] + lr * Math.sin(m)], label, 'lbl ' + cls) : '');
+  }
+  // 頂点の名前（図形の中心から外側へ少しずらす）
+  function names(pts, labels) {
+    const c = [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length];
+    return pts.map((p, i) => { const dx = p[0] - c[0], dy = p[1] - c[1], L = Math.hypot(dx, dy) || 1; return tx([p[0] + (dx / L) * 15, p[1] + (dy / L) * 15], labels[i]); }).join('');
+  }
+  // 等しい辺の印
+  function tick(a, b, n = 1) {
+    const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+    const u = [dx / L, dy / L], nv = [-u[1] * 7, u[0] * 7];
+    let s = '';
+    for (let i = 0; i < n; i++) { const c = add2(m, u, (i - (n - 1) / 2) * 5); s += ln(add2(c, nv, 1), add2(c, nv, -1), 'thin'); }
+    return s;
+  }
+  const FIGNOTE = '<div class="fignote">※ 図の形は目安です</div>';
+
+  // ===== 中2 図形の調べ方（平行と合同） =====
+  add({
+    id: 'g_parallel', unit: 'u2_geo1', name: '平行線と角', prereq: [],
+    lesson: `<p class="pt"><b>対頂角</b>は等しい。</p>
+<p class="pt">2直線が平行なら、<b>同位角</b>は等しく、<b>錯角</b>も等しい。</p>
+<p class="pt">一直線の角は <b>180°</b>。</p>
+<div class="ex">例）ℓ∥m で、ℓ と交わってできる角が 70° なら、m の同じ位置（同位角）も 70°、となりの角は 180° − 70° = 110°</div>`,
+    gen() {
+      const a = pick([40, 45, 50, 55, 60, 65, 70, 75]);
+      const c = Math.cos(a * RAD), s = Math.sin(a * RAD);
+      const P = [100, 50], Q = [100 + 100 / Math.tan(a * RAD), 150];
+      const val = (pos) => (pos === 'UL' || pos === 'LR' ? a : 180 - a);
+      const rays = (V) => ({ R: add2(V, [60, 0]), L: add2(V, [-60, 0]), U: add2(V, [-c, -s], 40), D: add2(V, [c, s], 40) });
+      const corner = { UL: ['L', 'U'], UR: ['U', 'R'], LR: ['R', 'D'], LL: ['D', 'L'] };
+      const POS = ['UL', 'UR', 'LR', 'LL'], OPP = { UL: 'LR', LR: 'UL', UR: 'LL', LL: 'UR' };
+      const g = pick(POS);
+      const tgt = Math.random() < 0.2 ? { pt: 'P', pos: OPP[g] } : { pt: 'Q', pos: pick(POS) };
+      const x = val(tgt.pos), given = val(g);
+      let reason;
+      if (tgt.pt === 'P') reason = '対頂角は等しい';
+      else if (tgt.pos === g) reason = '平行線の同位角は等しい';
+      else if ((g === 'LR' && tgt.pos === 'UL') || (g === 'LL' && tgt.pos === 'UR')) reason = '平行線の錯角は等しい';
+      else reason = x === given ? '同位角と対頂角を組み合わせると、同じ大きさになる' : '同位角に移すと、∠x と合わせて一直線（180°）になる';
+      const rp = rays(P), rq = rays(Q), V = tgt.pt === 'P' ? P : Q, rv = tgt.pt === 'P' ? rp : rq;
+      const body = ln([10, 50], [Q[0] + 80, 50]) + ln([10, 150], [Q[0] + 80, 150]) + ln(add2(P, [-c, -s], 45), add2(Q, [c, s], 45))
+        + tx([0, 50], 'ℓ') + tx([0, 150], 'm')
+        + ang(P, rp[corner[g][0]], rp[corner[g][1]], given + '°')
+        + ang(V, rv[corner[tgt.pos][0]], rv[corner[tgt.pos][1]], 'x', 'x', 16);
+      const f = fig([[0, 50], [Q[0] + 80, 150], add2(P, [-c, -s], 45), add2(Q, [c, s], 45)], body, 20, 16);
+      return {
+        q: `図で ℓ∥m のとき、∠x の大きさを求めなさい。${f}`,
+        fields: [{ label: '∠x =', post: '°' }], answer: [x],
+        hints: ['平行線では、同位角・錯角が等しい。一直線の角は 180° だよ。', `ヒント：${reason}。`],
+        explain: steps([reason + '。', x === given ? `∠x = ${given}°` : `∠x = 180° − ${given}° = ${x}°`]),
+      };
+    },
+  });
+
+  add({
+    id: 'g_parallel_bend', unit: 'u2_geo1', name: '平行線と折れ線の角', prereq: ['g_parallel'], diag: false,
+    lesson: `<p class="pt">折れ曲がった点を通り、ℓ に<b>平行な直線をひく</b>と、錯角が2つできる。</p>
+<p class="pt">「く」の字の角 = <b>上の角 + 下の角</b></p>
+<div class="ex">例）上の角 30°、下の角 40° → x = 30° + 40° = 70°</div>`,
+    gen() {
+      const a = pick([25, 30, 35, 40, 45, 50, 55]), b = pick([25, 30, 35, 40, 45, 50, 55]);
+      const L = [40, 40], P = [40 + 70 / Math.tan(a * RAD), 110], M = [P[0] - 70 / Math.tan(b * RAD), 180];
+      const right = Math.max(P[0], 160) + 60;
+      const findA = Math.random() < 0.35;
+      const body = ln([0, 40], [right, 40]) + ln([0, 180], [right, 180]) + ln(L, P) + ln(P, M) + tx([-14, 40], 'ℓ') + tx([-14, 180], 'm')
+        + ang(L, [right, 40], P, findA ? 'x' : a + '°', findA ? 'x' : '') + ang(M, [right, 180], P, b + '°')
+        + ang(P, L, M, findA ? (a + b) + '°' : 'x', findA ? '' : 'x', 18)
+        + ln([P[0] - 30, 110], [right, 110], 'thin dash');
+      const f = fig([[-14, 40], [right, 180]], body, 16, 16);
+      const ans = findA ? a : a + b;
+      return {
+        q: `図で ℓ∥m のとき、∠x の大きさを求めなさい。${f}`,
+        fields: [{ label: '∠x =', post: '°' }], answer: [ans],
+        hints: ['折れ曲がった点を通り、ℓ に平行な直線（点線）をひいて考えよう。', `錯角を使うと、折れ曲がった点の角 = 上の角 + 下の角。`],
+        explain: steps(findA ? [`${a + b}° = ∠x + ${b}°`, `∠x = ${a + b}° − ${b}° = ${a}°`] : ['点線の上下で、それぞれ錯角が等しい。', `∠x = ${a}° + ${b}° = ${a + b}°`]),
+      };
+    },
+  });
+
+  add({
+    id: 'g_tri_angle', unit: 'u2_geo1', name: '三角形の内角と外角', prereq: ['g_parallel'],
+    lesson: `<p class="pt">三角形の<b>内角の和は 180°</b>。</p>
+<p class="pt">三角形の<b>外角は、となりにない2つの内角の和</b>に等しい。</p>
+<div class="ex">例）∠A = 50°、∠B = 60° → ∠C = 70°、C の外角 = 50° + 60° = 110°</div>`,
+    gen() {
+      let b, c, a;
+      do { b = pick([30, 35, 40, 45, 50, 55, 60, 65]); c = pick([30, 35, 40, 45, 50, 55, 60, 65]); a = 180 - b - c; } while (a < 35);
+      const B = [0, 0], C = [220, 0], tb = Math.tan(b * RAD), tc = Math.tan(c * RAD);
+      const A = [220 * tc / (tb + tc), -(220 * tc / (tb + tc)) * tb];
+      const outer = Math.random() < 0.5, D = [290, 0];
+      let body = pg([A, B, C]) + names([A, B, C], ['A', 'B', 'C']) + ang(B, C, A, b + '°');
+      let ans, ex;
+      if (outer) {
+        body += ln(C, D) + ang(A, B, C, a + '°') + ang(C, D, A, 'x', 'x', 18);
+        ans = a + b; ex = [`外角 = となりにない2つの内角の和`, `∠x = ${a}° + ${b}° = ${ans}°`];
+      } else {
+        body += ang(C, A, B, c + '°') + ang(A, B, C, 'x', 'x');
+        ans = a; ex = [`内角の和は 180°`, `∠x = 180° − ${b}° − ${c}° = ${ans}°`];
+      }
+      const f = fig([A, B, C, outer ? D : C], body);
+      return {
+        q: `図の ∠x の大きさを求めなさい。${f}`,
+        fields: [{ label: '∠x =', post: '°' }], answer: [ans],
+        hints: [outer ? '∠x は三角形の外角。となりにない2つの内角に注目しよう。' : '三角形の内角の和は 180° だよ。', outer ? `∠x = ${a}° + ${b}°` : `∠x = 180° − ${b}° − ${c}°`],
+        explain: steps(ex),
+      };
+    },
+  });
+
+  add({
+    id: 'g_polygon', unit: 'u2_geo1', name: '多角形の角', prereq: ['g_tri_angle', 's1_mixed'], diag: false,
+    lesson: `<p class="pt">n 角形の<b>内角の和 = 180° × (n − 2)</b></p>
+<p class="pt">多角形の<b>外角の和は、いつも 360°</b>。</p>
+<div class="ex">例）六角形の内角の和 = 180° × 4 = 720°、正六角形の1つの外角 = 360° ÷ 6 = 60°</div>`,
+    gen() {
+      const t = R(0, 3);
+      if (t === 0) {
+        const n = R(5, 12);
+        return {
+          q: `${n}角形の内角の和を求めなさい。`, fields: [{ label: '内角の和', post: '°' }], answer: [180 * (n - 2)],
+          hints: ['n 角形は、1つの頂点から対角線をひくと (n − 2) 個の三角形に分けられるよ。', `180° × (${n} − 2)`],
+          explain: steps([`180° × (${n} − 2) = 180° × ${n - 2} = ${180 * (n - 2)}°`]),
+        };
+      }
+      const n = pick([5, 6, 8, 9, 10, 12]);
+      if (t === 1) return {
+        q: `正${n}角形の1つの内角の大きさを求めなさい。`, fields: [{ label: '1つの内角', post: '°' }], answer: [180 * (n - 2) / n],
+        hints: ['まず内角の和を求めて、角の数でわろう。（または 180° − 1つの外角）', `内角の和は 180° × ${n - 2} = ${180 * (n - 2)}°`],
+        explain: steps([`内角の和 ${180 * (n - 2)}° ÷ ${n} = ${180 * (n - 2) / n}°`, `（別解）180° − 360° ÷ ${n} = ${180 * (n - 2) / n}°`]),
+      };
+      if (t === 2) return {
+        q: `正${n}角形の1つの外角の大きさを求めなさい。`, fields: [{ label: '1つの外角', post: '°' }], answer: [360 / n],
+        hints: ['外角の和は、何角形でも 360° だよ。', `360° ÷ ${n}`],
+        explain: steps([`360° ÷ ${n} = ${360 / n}°`]),
+      };
+      return {
+        q: `1つの外角が ${360 / n}° の正多角形は、正何角形ですか。`, fields: [{ label: '正', post: '角形' }], answer: [n],
+        hints: ['外角の和は 360°。1つの外角が何個あれば 360° になる？', `360° ÷ ${360 / n}°`],
+        explain: steps([`360° ÷ ${360 / n}° = ${n}`, `正${n}角形`]),
+      };
+    },
+  });
+
+  const CONG = ['3組の辺がそれぞれ等しい', '2組の辺とその間の角がそれぞれ等しい', '1組の辺とその両端の角がそれぞれ等しい', '合同とはいえない'];
+  add({
+    id: 'g_congruence', unit: 'u2_geo1', name: '三角形の合同条件', prereq: [],
+    lesson: `<p class="pt">三角形の合同条件は3つ。</p>
+<p class="pt">① <b>3組の辺</b>がそれぞれ等しい<br>② <b>2組の辺とその間の角</b>がそれぞれ等しい<br>③ <b>1組の辺とその両端の角</b>がそれぞれ等しい</p>
+<p class="pt">角が「辺の間」にあるか、「辺の両端」にあるかがポイント。</p>`,
+    gen() {
+      const A = ['A', 'B', 'C'], Dd = ['D', 'E', 'F'];
+      const side = (i, j) => `${A[i]}${A[j]} = ${Dd[i]}${Dd[j]}`, angle = (i) => `∠${A[i]} = ∠${Dd[i]}`;
+      const o = shuffle([0, 1, 2]), [i, j, k] = o;
+      const t = R(0, 4);
+      let conds, ans, why;
+      if (t === 0) { conds = [side(0, 1), side(1, 2), side(2, 0)]; ans = 0; why = '3組の辺がすべて等しい。'; }
+      else if (t === 1) { conds = [side(i, j), side(i, k), angle(i)]; ans = 1; why = `∠${A[i]} は、辺 ${A[i]}${A[j]} と ${A[i]}${A[k]} の間の角。`; }
+      else if (t === 2) { conds = [side(i, j), angle(i), angle(j)]; ans = 2; why = `∠${A[i]} と ∠${A[j]} は、辺 ${A[i]}${A[j]} の両端の角。`; }
+      else if (t === 3) { conds = [side(i, j), side(j, k), angle(i)]; ans = 3; why = `∠${A[i]} は、2つの辺 ${A[i]}${A[j]}・${A[j]}${A[k]} の間の角ではない（間の角は ∠${A[j]}）。これでは合同とはいえない。`; }
+      else { conds = [angle(0), angle(1), angle(2)]; ans = 3; why = '3つの角が等しいだけでは、大きさのちがう三角形もできるので合同とはいえない。'; }
+      return {
+        q: `△ABC と △DEF で、次のことが成り立ちます。合同といえる場合は、その合同条件を選びなさい。<div class="conds">${shuffle(conds).join('<br>')}</div>`,
+        choices: CONG, correct: ans,
+        hints: ['等しい辺と角を、三角形の図にかきこんで確かめよう。', t === 4 ? '辺の条件が1つもないね。' : '角は、2つの辺の「間」にある？それとも1つの辺の「両端」にある？'],
+        explain: steps([why, `答え：${CONG[ans]}`]),
+      };
+    },
+  });
+
+  const PROOF_R = ['対頂角', '平行線の錯角', '平行線の同位角', '共通な辺'];
+  const PROOF_C = ['3組の辺', '2組の辺とその間の角', '1組の辺とその両端の角', '3組の角'];
+  add({
+    id: 'g_proof', unit: 'u2_geo1', name: '合同の証明', prereq: ['g_congruence', 'g_parallel'], diag: false,
+    lesson: `<p class="pt">証明は「<b>仮定</b>（わかっていること）」から「<b>結論</b>（示したいこと）」へ、根拠をつけて進める。</p>
+<p class="pt">よく使う根拠：<b>対頂角</b>、<b>平行線の錯角・同位角</b>、<b>共通な辺</b>、そして<b>合同条件</b>。</p>`,
+    gen() {
+      const T = pick([
+        {
+          pts: [[40, 40], [260, 160], [40, 160], [260, 40], [150, 100]], lab: ['A', 'B', 'C', 'D', 'O'],
+          lines: [[0, 1], [2, 3], [0, 2], [3, 1]], ticks: [[0, 4, 1], [4, 1, 1], [2, 4, 2], [4, 3, 2]],
+          head: '線分 AB と CD が点 O で交わり、AO = BO、CO = DO のとき、△AOC ≡ △BOD となることを証明します。',
+          rows: (b) => ['△AOC と △BOD で', '仮定から　AO = BO …①', '仮定から　CO = DO …②', `${b(0)}は等しいから　∠AOC = ∠BOD …③`, `①、②、③より、${b(1)}がそれぞれ等しいから　△AOC ≡ △BOD`],
+          blanks: [{ set: PROOF_R, ans: 0 }, { set: PROOF_C, ans: 1 }],
+        },
+        {
+          pts: [[40, 40], [130, 40], [170, 160], [260, 160], [150, 100]], lab: ['A', 'B', 'C', 'D', 'O'],
+          lines: [[0, 1], [2, 3], [0, 3], [1, 2]], ticks: [[0, 4, 1], [4, 3, 1]],
+          head: '線分 AD と BC が点 O で交わり、AB∥CD、AO = DO のとき、△ABO ≡ △DCO となることを証明します。',
+          rows: (b) => ['△ABO と △DCO で', '仮定から　AO = DO …①', `AB∥CD より、${b(0)}は等しいから　∠BAO = ∠CDO …②`, `${b(1)}は等しいから　∠AOB = ∠DOC …③`, `①、②、③より、${b(2)}がそれぞれ等しいから　△ABO ≡ △DCO`],
+          blanks: [{ set: PROOF_R, ans: 1 }, { set: PROOF_R, ans: 0 }, { set: PROOF_C, ans: 2 }],
+        },
+        {
+          pts: [[150, 30], [60, 110], [150, 190], [240, 110]], lab: ['A', 'B', 'C', 'D'],
+          lines: [[0, 1], [1, 2], [2, 3], [3, 0], [0, 2]], ticks: [[0, 1, 1], [0, 3, 1], [1, 2, 2], [3, 2, 2]],
+          head: '四角形 ABCD で、AB = AD、BC = DC のとき、△ABC ≡ △ADC となることを証明します。',
+          rows: (b) => ['△ABC と △ADC で', '仮定から　AB = AD …①', '仮定から　BC = DC …②', `AC は${b(0)}だから　AC = AC …③`, `①、②、③より、${b(1)}がそれぞれ等しいから　△ABC ≡ △ADC`],
+          blanks: [{ set: PROOF_R, ans: 3 }, { set: PROOF_C, ans: 0 }],
+        },
+      ]);
+      const k = R(0, T.blanks.length - 1), bl = T.blanks[k];
+      const b = (i) => (i === k ? '<b class="blank">ア</b>' : T.blanks[i].set[T.blanks[i].ans]);
+      const P = T.pts;
+      const body = T.lines.map(([i, j]) => ln(P[i], P[j])).join('') + T.ticks.map(([i, j, n]) => tick(P[i], P[j], n)).join('')
+        + P.map((p, i) => tx(add2(p, [p[0] < 150 ? -14 : p[0] > 150 ? 14 : 0, p[1] < 100 ? -12 : p[1] > 100 ? 12 : (T.lab[i] === 'O' ? 16 : 0)]), T.lab[i])).join('');
+      return {
+        q: `${T.head}${fig(P, body, 26, 22)}<div class="proof">${T.rows(b).join('<br>')}</div>【ア】にあてはまることばを選びなさい。`,
+        choices: bl.set, correct: bl.ans,
+        hints: [bl.set === PROOF_C ? 'これまでの①〜③が「辺」か「角」か、どこにあるかを確かめよう。' : '図で、その2つの角（または辺）の位置関係を見てみよう。', bl.set === PROOF_C ? '①②③の中に、辺はいくつ、角はいくつある？' : '向かい合っている？平行線の内側でZの形？同じ辺を両方の三角形が使っている？'],
+        explain: steps([`【ア】：${bl.set[bl.ans]}`, T.rows((i) => T.blanks[i].set[T.blanks[i].ans]).slice(-1)[0]]),
+      };
+    },
+  });
+
+  // ===== 中2 三角形と四角形 =====
+  add({
+    id: 'g_isosceles', unit: 'u2_geo2', name: '二等辺三角形の角', prereq: ['g_tri_angle'],
+    lesson: `<p class="pt">二等辺三角形の<b>底角は等しい</b>。</p>
+<p class="pt">内角の和 180° と組み合わせて考える。</p>
+<div class="ex">例）頂角 40° → 底角 = (180° − 40°) ÷ 2 = 70°</div>`,
+    gen() {
+      const byApex = Math.random() < 0.5;
+      const a = byApex ? pick([20, 30, 40, 50, 60, 70, 80, 90, 100, 110]) : null;
+      const base = byApex ? (180 - a) / 2 : pick([35, 40, 45, 50, 55, 60, 65, 70, 75]);
+      const apex = 180 - 2 * base;
+      const h = 140, hw = h * Math.tan((apex / 2) * RAD);
+      const A = [0, 0], B = [-hw, h], C = [hw, h];
+      const body = pg([A, B, C]) + names([A, B, C], ['A', 'B', 'C']) + tick(A, B) + tick(A, C)
+        + (byApex ? ang(A, B, C, apex + '°') + ang(B, C, A, 'x', 'x') : ang(B, C, A, base + '°') + ang(A, B, C, 'x', 'x'));
+      return {
+        q: `AB = AC の二等辺三角形で、∠x の大きさを求めなさい。${fig([A, B, C], body)}`,
+        fields: [{ label: '∠x =', post: '°' }], answer: [byApex ? base : apex],
+        hints: ['二等辺三角形の2つの底角（∠B と ∠C）は等しいよ。', byApex ? `底角2つで 180° − ${apex}° = ${180 - apex}°` : `底角は2つとも ${base}°`],
+        explain: steps(byApex ? [`∠B = ∠C だから`, `∠x = (180° − ${apex}°) ÷ 2 = ${base}°`] : [`∠B = ∠C = ${base}°`, `∠x = 180° − ${base}° × 2 = ${apex}°`]),
+      };
+    },
+  });
+
+  add({
+    id: 'g_parallelogram', unit: 'u2_geo2', name: '平行四辺形の性質', prereq: ['g_parallel'],
+    lesson: `<p class="pt">平行四辺形では、</p>
+<p class="pt">① <b>2組の向かい合う辺</b>はそれぞれ等しい<br>② <b>2組の向かい合う角</b>はそれぞれ等しい<br>③ <b>対角線はそれぞれの中点</b>で交わる</p>
+<p class="pt">となり合う角の和は 180°。</p>`,
+    gen() {
+      const b = pick([50, 55, 60, 65, 70, 75, 80]), dx = 100 / Math.tan(b * RAD);
+      const B = [0, 100], C = [200, 100], A = [dx, 0], D = [200 + dx, 0];
+      const O = [(A[0] + C[0]) / 2, (A[1] + C[1]) / 2];
+      const t = R(0, 2);
+      let body = pg([A, B, C, D]) + names([A, B, C, D], ['A', 'B', 'C', 'D']), q, ans, fields, hints, ex;
+      if (t < 2) {
+        const atA = t === 0;
+        body += ang(B, C, A, b + '°') + (atA ? ang(A, B, D, 'x', 'x') : ang(D, A, C, 'x', 'x'));
+        ans = atA ? 180 - b : b; fields = [{ label: '∠x =', post: '°' }];
+        q = '平行四辺形 ABCD で、∠x の大きさを求めなさい。';
+        hints = [atA ? 'となり合う角の和は 180°（AD∥BC の同側内角）。' : '平行四辺形の向かい合う角は等しいよ。', atA ? `∠x = 180° − ${b}°` : `∠D は ∠B と向かい合っている。`];
+        ex = [atA ? `∠A + ∠B = 180° より、∠x = 180° − ${b}° = ${ans}°` : `向かい合う角は等しいので ∠x = ∠B = ${b}°`];
+      } else {
+        const k = R(3, 9);
+        body += ln(A, C) + ln(B, D) + tx(add2(O, [0, 16]), 'O') + tx([(A[0] + O[0]) / 2 + 8, (A[1] + O[1]) / 2 - 10], k + 'cm', 'lbl');
+        ans = 2 * k; fields = [{ label: 'AC =', post: 'cm' }];
+        q = `平行四辺形 ABCD の対角線の交点を O とします。AO = ${k}cm のとき、AC の長さを求めなさい。`;
+        hints = ['平行四辺形の対角線は、それぞれの中点で交わるよ。', `AO = OC = ${k}cm`];
+        ex = [`対角線はそれぞれの中点で交わるので OC = AO = ${k}cm`, `AC = ${k} × 2 = ${ans}cm`];
+      }
+      return { q: q + fig([A, B, C, D], body), fields, answer: [ans], hints, explain: steps(ex) };
+    },
+  });
+
+  const QUADS = ['平行四辺形', '長方形', 'ひし形', '正方形'];
+  add({
+    id: 'g_quad_kind', unit: 'u2_geo2', name: '特別な平行四辺形', prereq: ['g_parallelogram'], diag: false,
+    lesson: `<p class="pt"><b>長方形</b>：4つの角が等しい（対角線の長さが等しい）</p>
+<p class="pt"><b>ひし形</b>：4つの辺が等しい（対角線が垂直に交わる）</p>
+<p class="pt"><b>正方形</b>：4つの角も4つの辺も等しい（対角線が等しく、垂直に交わる）</p>
+<p class="pt">どれも平行四辺形の性質をすべて持っている。</p>`,
+    gen() {
+      const E = pick([
+        ['4つの角がすべて等しい四角形', 1], ['4つの辺がすべて等しい四角形', 2], ['4つの角も4つの辺もすべて等しい四角形', 3],
+        ['2組の向かい合う辺がそれぞれ平行な四角形', 0], ['2組の向かい合う辺がそれぞれ等しい四角形', 0], ['2組の向かい合う角がそれぞれ等しい四角形', 0],
+        ['対角線がそれぞれの中点で交わる四角形', 0], ['1組の向かい合う辺が平行で、その長さが等しい四角形', 0],
+        ['対角線の長さが等しい平行四辺形', 1], ['対角線が垂直に交わる平行四辺形', 2], ['対角線の長さが等しく、垂直に交わる平行四辺形', 3],
+        ['となり合う辺の長さが等しい平行四辺形', 2], ['1つの角が直角の平行四辺形', 1],
+      ]);
+      return {
+        q: `「${E[0]}」は、必ず何になりますか。いちばんふさわしいものを選びなさい。`,
+        choices: QUADS, correct: E[1],
+        hints: ['辺について？角について？対角線について？を見分けよう。', '角が等しい → 長方形、辺が等しい → ひし形、両方 → 正方形。'],
+        explain: steps([`「${E[0]}」→ <b>${QUADS[E[1]]}</b>`]),
+      };
+    },
+  });
+
+  const RIGHT = ['斜辺と1つの鋭角がそれぞれ等しい', '斜辺と他の1辺がそれぞれ等しい', '2組の辺とその間の角がそれぞれ等しい', '合同とはいえない'];
+  add({
+    id: 'g_right_tri', unit: 'u2_geo2', name: '直角三角形の合同条件', prereq: ['g_congruence'], diag: false,
+    lesson: `<p class="pt">直角三角形では、ふつうの合同条件に加えて、</p>
+<p class="pt">① <b>斜辺と1つの鋭角</b>がそれぞれ等しい<br>② <b>斜辺と他の1辺</b>がそれぞれ等しい</p>
+<p class="pt">でも合同になる。<b>斜辺</b>は直角の向かい側の辺。</p>`,
+    gen() {
+      const t = R(0, 3);
+      let conds, ans;
+      if (t === 0) { conds = ['AB = DE', pick(['∠A = ∠D', '∠B = ∠E'])]; ans = 0; }
+      else if (t === 1) { conds = ['AB = DE', pick(['BC = EF', 'AC = DF'])]; ans = 1; }
+      else if (t === 2) { conds = ['AC = DF', 'BC = EF']; ans = 2; }
+      else { conds = [pick(['∠A = ∠D', '∠B = ∠E'])]; ans = 3; }
+      return {
+        q: `∠C = ∠F = 90° の直角三角形 ABC と DEF で、次のことが成り立ちます。合同といえる場合は、その合同条件を選びなさい。<div class="conds">${conds.join('<br>')}</div>`,
+        choices: RIGHT, correct: ans,
+        hints: ['∠C が直角なので、斜辺は AB（と DE）だよ。', ans === 3 ? '辺の条件がないと、大きさが決まらないね。' : '条件に「斜辺」は入っている？'],
+        explain: steps([ans === 2 ? 'AC と BC は直角をはさむ2辺。間の角（直角）も等しい。' : ans === 3 ? '角だけでは大きさが決まらない。' : '斜辺 AB = DE がある。', `答え：${RIGHT[ans]}`]),
+      };
+    },
+  });
+
+  add({
+    id: 'g_area', unit: 'u2_geo2', name: '平行線と面積', prereq: ['g_parallelogram'], diag: false,
+    lesson: `<p class="pt">底辺が共通で、<b>高さが等しい三角形は面積が等しい</b>。</p>
+<p class="pt">AD∥BC なら、△ABC と △DBC は底辺 BC が共通で高さが等しいので、<b>△ABC = △DBC</b>。</p>`,
+    gen() {
+      const A = [70, 0], D = [190, 0], B = [0, 120], C = [270, 120];
+      const ix = (p1, p2, p3, p4) => { const d = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0]); const a = p1[0] * p2[1] - p1[1] * p2[0], b = p3[0] * p4[1] - p3[1] * p4[0]; return [(a * (p3[0] - p4[0]) - (p1[0] - p2[0]) * b) / d, (a * (p3[1] - p4[1]) - (p1[1] - p2[1]) * b) / d]; };
+      const O = ix(A, C, B, D);
+      const S = R(10, 30) * 2, t = R(3, S / 2 - 2);
+      const body = pg([A, B, C, D]) + ln(A, C) + ln(B, D) + names([A, B, C, D], ['A', 'B', 'C', 'D']) + tx(add2(O, [0, 16]), 'O');
+      const v = R(0, 1);
+      return {
+        q: `AD∥BC の台形 ABCD で、対角線の交点を O とします。△ABC = ${S}cm²${v ? `、△OBC = ${t}cm²` : ''} のとき、${v ? '△DOC' : '△DBC'} の面積を求めなさい。${fig([A, B, C, D], body)}`,
+        fields: [{ label: v ? '△DOC' : '△DBC', post: 'cm²' }], answer: [v ? S - t : S],
+        hints: ['AD∥BC なので、△ABC と △DBC は底辺 BC が共通で、高さが等しいよ。', v ? `△DBC = ${S}cm²。そこから △OBC をひくと？` : '高さが等しいなら、面積は？'],
+        explain: steps(v ? [`△DBC = △ABC = ${S}cm²`, `△DOC = △DBC − △OBC = ${S} − ${t} = ${S - t}cm²`] : ['底辺 BC が共通で、高さが等しい', `△DBC = △ABC = ${S}cm²`]),
+      };
+    },
+  });
+
+  // ===== 中2 データの活用 =====
+  const med = (a) => { const n = a.length, m = Math.floor(n / 2); return n % 2 ? a[m] : (a[m - 1] + a[m]) / 2; };
+  function quartiles(sorted) {
+    const n = sorted.length;
+    return { q1: med(sorted.slice(0, Math.floor(n / 2))), q2: med(sorted), q3: med(sorted.slice(Math.ceil(n / 2))) };
+  }
+  add({
+    id: 'd_quartile', unit: 'u2_data', name: '四分位数', prereq: [],
+    lesson: `<p class="pt">データを<b>小さい順に並べ</b>、4等分する位置の値を<b>四分位数</b>という。</p>
+<p class="pt">中央値（第2四分位数）でデータを前半・後半に分け、<b>前半の中央値が第1四分位数</b>、<b>後半の中央値が第3四分位数</b>。</p>
+<p class="pt">データの個数が奇数のときは、中央値をどちらにも入れない。</p>
+<div class="ex">例）1, 3, 4, 6, 7, 9, 10 → 中央値 6、前半 1,3,4 → 第1四分位数 3、後半 7,9,10 → 第3四分位数 9</div>`,
+    gen() {
+      const n = pick([7, 8, 9, 10, 11]);
+      const data = Array.from({ length: n }, () => R(0, 15)), s = data.slice().sort((x, y) => x - y), q = quartiles(s);
+      const what = pick(['15点満点の小テストの得点', '1か月に読んだ本の冊数', '1週間に家で勉強した時間（時間）']);
+      return {
+        q: `次のデータは、${n}人の${what}です。四分位数を求めなさい。<div class="conds">${data.join(', ')}</div>`,
+        dec: true, form: '小数は「.」で入力（例：6.5）',
+        fields: [{ label: '第1四分位数' }, { label: '第2四分位数（中央値）' }, { label: '第3四分位数' }], answer: [String(q.q1), String(q.q2), String(q.q3)],
+        hints: [`まず小さい順に並べよう：${s.join(', ')}`, `中央値は ${q.q2}。${n % 2 ? '中央値を除いた' : ''}前半 ${s.slice(0, Math.floor(n / 2)).join(', ')} と後半 ${s.slice(Math.ceil(n / 2)).join(', ')} に分けよう。`],
+        explain: steps([`並べると ${s.join(', ')}`, `中央値（第2四分位数）＝ ${q.q2}`, `前半 ${s.slice(0, Math.floor(n / 2)).join(', ')} の中央値 → 第1四分位数 ${q.q1}`, `後半 ${s.slice(Math.ceil(n / 2)).join(', ')} の中央値 → 第3四分位数 ${q.q3}`]),
+      };
+    },
+  });
+
+  add({
+    id: 'd_boxplot', unit: 'u2_data', name: '箱ひげ図', prereq: ['d_quartile'], diag: false,
+    lesson: `<p class="pt"><b>箱ひげ図</b>は、最小値・第1四分位数・中央値・第3四分位数・最大値の5つを表した図。</p>
+<p class="pt"><b>範囲 = 最大値 − 最小値</b><br><b>四分位範囲 = 第3四分位数 − 第1四分位数</b>（箱の長さ）</p>`,
+    gen() {
+      const mn = R(0, 3), q1 = mn + R(2, 5), md = q1 + R(1, 4), q3 = md + R(1, 4), mx = Math.min(25, q3 + R(2, 6));
+      const X = (v) => v * 12, y = 0;
+      let body = ln([X(0), 40], [X(25), 40]);
+      for (let v = 0; v <= 25; v++) body += ln([X(v), 40], [X(v), v % 5 ? 44 : 47], 'thin') + (v % 5 ? '' : tx([X(v), 60], v, 'sm'));
+      body += ln([X(mn), y], [X(q1), y]) + ln([X(q3), y], [X(mx), y]) + `<rect x="${X(q1)}" y="${y - 12}" width="${X(q3) - X(q1)}" height="24" class="box"/>` + ln([X(md), y - 12], [X(md), y + 12]) + ln([X(mn), y - 7], [X(mn), y + 7]) + ln([X(mx), y - 7], [X(mx), y + 7]);
+      const f = fig([[X(0), -12], [X(25), 60]], body, 16, 14);
+      const t = R(0, 2);
+      const F = [[{ label: '中央値' }, { label: '四分位範囲' }], [{ label: '範囲' }, { label: '四分位範囲' }], [{ label: '第1四分位数' }, { label: '第3四分位数' }]][t];
+      const A = [[md, q3 - q1], [mx - mn, q3 - q1], [q1, q3]][t];
+      return {
+        q: `次の箱ひげ図は、あるクラスの小テストの得点を表したものです。${f}`,
+        fields: F, answer: A,
+        hints: ['左から 最小値・第1四分位数・中央値（箱の中の線）・第3四分位数・最大値 だよ。', `読み取ると ${mn}・${q1}・${md}・${q3}・${mx}。`],
+        explain: steps([`最小値 ${mn}、第1四分位数 ${q1}、中央値 ${md}、第3四分位数 ${q3}、最大値 ${mx}`, `範囲 = ${mx} − ${mn} = ${mx - mn}`, `四分位範囲 = ${q3} − ${q1} = ${q3 - q1}`]),
+      };
+    },
+  });
+
   // ===== 中2 確率 =====
   add({
     id: 's2_prob_die1', unit: 'u2_prob', name: '確率（さいころ1個）', prereq: [],
@@ -568,6 +971,9 @@
     { id: 'u2_expr', grade: 2, name: '式の計算' },
     { id: 'u2_sys', grade: 2, name: '連立方程式' },
     { id: 'u2_lin', grade: 2, name: '一次関数' },
+    { id: 'u2_geo1', grade: 2, name: '図形の調べ方' },
+    { id: 'u2_geo2', grade: 2, name: '三角形と四角形' },
+    { id: 'u2_data', grade: 2, name: 'データの活用' },
     { id: 'u2_prob', grade: 2, name: '確率' },
   ];
   const unitById = {}; units.forEach((u) => { unitById[u.id] = u; u.skills = []; });

@@ -146,9 +146,9 @@
   // 学ぶ順番（前提から順に。苦手 → 中2 → 残り）
   function recommendOrder() {
     const L = SK.list, out = [];
-    const isUntested1 = (s) => s.grade === 1 && sk(s.id).diag === 'untested';
+    const untested = (s) => sk(s.id).diag === 'untested' || (st.diag && !sk(s.id).diag);
     const push = (f) => L.forEach((s) => { if (f(s) && !out.includes(s)) out.push(s); });
-    push((s) => sk(s.id).score < 40 && !isUntested1(s));
+    push((s) => sk(s.id).score < 40 && !untested(s));
     push((s) => s.grade === 2 && sk(s.id).score < 70);
     push((s) => sk(s.id).score < 70);
     push((s) => sk(s.id).score < 90);
@@ -313,7 +313,7 @@
       main = `<div class="card accent">
   <div class="tag">STEP 1</div>
   <h2>まずは実力チェック</h2>
-  <p>今どこまでわかっているかを確かめて、あなた専用の学習の順番を作ります。約15分。</p>
+  <p>今どこまでわかっているかを確かめて、あなた専用の学習の順番を作ります。約20分。</p>
   <button class="btn primary big" data-act="diagIntro">実力チェックをはじめる</button>
 </div>`;
     } else if (!st.goal) {
@@ -419,7 +419,7 @@ ${p.days.map((d, i) => `<div class="pday ${i === 0 ? 'now' : ''}"><div class="pd
 <div class="card">
   <h2>実力チェック</h2>
   <ul class="list">
-    <li>中2の内容から出題します。</li>
+    <li>中2の内容から出題します（約20〜30問）。途中でやめると最初からになります。</li>
     <li>まちがえた単元は、<b>中1の内容にさかのぼって</b>確認します。</li>
     <li>成績ではありません。わからない問題は<b>「わからない」</b>を押してOK。</li>
     <li>結果をもとに、あなた専用の学習の順番を作ります。</li>
@@ -432,7 +432,7 @@ ${p.days.map((d, i) => `<div class="pday ${i === 0 ? 'now' : ''}"><div class="pd
   let D = null; // 実力チェック中の状態
   let newBadges = []; // 直前に取れたバッジ（結果画面で表示）
   function diagStart() {
-    D = { queue: SK.list.filter((s) => s.grade === 2).map((s) => s.id), tested: {}, start: Date.now(), cur: null, items: [] };
+    D = { queue: SK.list.filter((s) => s.grade === 2 && s.diag !== false).map((s) => s.id), tested: {}, start: Date.now(), cur: null, items: [] };
     nextDiag();
   }
   function nextDiag() {
@@ -621,11 +621,12 @@ ${pre.length ? `<div class="card warn">💡 先に <b>${pre.map((p) => esc(SK.by
     const body = `<div class="card qcard"><div class="q">${q.q}</div>${q.form ? `<div class="form">答えの形：${q.form}</div>` : ''}</div>`;
     let input = '';
     if (q.choices) {
+      const long = q.choices.some((c) => c.replace(/<[^>]+>/g, '').length > 8) ? 'long' : '';
       input = `<div class="choices">${q.choices.map((c, k) => {
         let cls = '';
         if (P.done) cls = k === q.correct ? 'ok' : P.picked === k ? 'ng' : '';
         else if (P.wrongPicks && P.wrongPicks.includes(k)) cls = 'ng';
-        return `<button class="choice ${cls}" data-act="choose" data-k="${k}" ${P.done || cls ? 'disabled' : ''}>${c}</button>`;
+        return `<button class="choice ${cls} ${long}" data-act="choose" data-k="${k}" ${P.done || cls ? 'disabled' : ''}>${c}</button>`;
       }).join('')}</div>`;
     } else {
       const box = (i, k) => {
@@ -663,11 +664,13 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
   }
 
   function keypadHTML() {
-    const keys = ['7', '8', '9', 'back', '4', '5', '6', '-', '1', '2', '3', 'tab', '0', 'clr'];
+    const dec = !!P.q.dec;
+    const keys = ['7', '8', '9', 'back', '4', '5', '6', '-', '1', '2', '3', 'tab', '0'].concat(dec ? ['.', 'clr'] : ['clr']);
     const label = { back: '⌫', '-': '−', clr: 'C', tab: '次の欄 →' };
     const multi = P.slots.length > 1;
+    const wide = (k) => (k === 'clr' || (k === '0' && !dec) ? 'wide' : '');
     return `<div class="keypad">${keys.map((k) => (k === 'tab' && !multi ? '<span></span>' :
-      `<button class="key ${/\d/.test(k) ? '' : 'fn'} ${k === '0' || k === 'clr' ? 'wide' : ''}" data-act="key" data-k="${k}">${label[k] || k}</button>`)).join('')}</div>`;
+      `<button class="key ${/\d/.test(k) ? '' : 'fn'} ${wide(k)}" data-act="key" data-k="${k}">${label[k] || k}</button>`)).join('')}</div>`;
   }
 
   SCREENS.practice = SCREENS.diag = function () { render(questionHTML()); };
@@ -681,6 +684,7 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
     else if (k === 'tab') { P.active = (P.active + 1) % P.inputs.length; return rerender(); }
     else if (k === '-') v = v.startsWith('-') ? v.slice(1) : '-' + v;
     else if (/^\d$/.test(k) && v.length < 6) v += k;
+    else if (k === '.' && P.q.dec && /\d$/.test(v) && !v.includes('.')) v += '.';
     P.inputs[P.active] = v;
     rerender();
   }
@@ -693,7 +697,7 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
       return toast('「' + slotName(empty) + '」を入力してね');
     }
     const bad = q.fields.findIndex((f, k) => SK.parseAnswer(fieldValue(k)) === null);
-    if (bad >= 0) return toast('分母に 0 は使えないよ');
+    if (bad >= 0) return toast(q.fields[bad].frac ? '分母に 0 は使えないよ' : '数の入れ方を確かめてね');
     judge(q.fields.every((f, k) => SK.sameValue(fieldValue(k), q.answer[k])));
   }
 
@@ -1036,7 +1040,7 @@ ${cancel}
     if (P.done) { if (e.key === 'Enter') next(); return; }
     if (P.q.choices) return;
     if (/^[0-9]$/.test(e.key)) key(e.key);
-    else if (e.key === '-') key('-');
+    else if (e.key === '-' || e.key === '.') key(e.key);
     else if (e.key === 'Backspace') key('back');
     else if (e.key === 'Tab') { e.preventDefault(); key('tab'); }
     else if (e.key === 'Enter') check();
