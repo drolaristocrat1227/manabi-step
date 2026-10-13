@@ -12,6 +12,40 @@
   const app = document.getElementById('app');
   const nav = document.getElementById('nav');
 
+  // ---------- 計算メモ（手書き。書いた内容は端末の外に出さず、次の問題で消える） ----------
+  const memo = document.createElement('div');
+  memo.id = 'memo'; memo.hidden = true;
+  memo.innerHTML = '<div class="memo-bar"><b>✏️ 計算メモ</b><button data-memo="pen" class="on">ペン</button><button data-memo="eraser">消しゴム</button><button data-memo="clear">全部消す</button><button data-memo="close" aria-label="閉じる">✕</button></div><canvas></canvas>';
+  document.body.appendChild(memo);
+  const cvs = memo.querySelector('canvas'), ctx = cvs.getContext('2d');
+  let memoOwner = null, eraser = false, pen = null;
+  function memoSize() {
+    const r = cvs.getBoundingClientRect(), d = window.devicePixelRatio || 1, w = Math.round(r.width * d), h = Math.round(r.height * d);
+    if (cvs.width !== w || cvs.height !== h) { cvs.width = w; cvs.height = h; }
+  }
+  const memoClear = () => ctx.clearRect(0, 0, cvs.width, cvs.height);
+  function memoOpen() { memo.hidden = false; document.body.classList.add('memo-open'); memoSize(); if (memoOwner !== P) { memoClear(); memoOwner = P; } }
+  function memoClose() { memo.hidden = true; document.body.classList.remove('memo-open'); }
+  const memoPos = (e) => { const r = cvs.getBoundingClientRect(), d = window.devicePixelRatio || 1; return [(e.clientX - r.left) * d, (e.clientY - r.top) * d]; };
+  cvs.addEventListener('pointerdown', (e) => { e.preventDefault(); cvs.setPointerCapture(e.pointerId); pen = memoPos(e); });
+  cvs.addEventListener('pointermove', (e) => {
+    if (!pen) return;
+    const q = memoPos(e), d = window.devicePixelRatio || 1;
+    ctx.globalCompositeOperation = eraser ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = getComputedStyle(document.body).color; ctx.lineWidth = (eraser ? 22 : 2.6) * d; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(pen[0], pen[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+    pen = q;
+  });
+  ['pointerup', 'pointercancel'].forEach((ev) => cvs.addEventListener(ev, () => { pen = null; }));
+  memo.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-memo]'); if (!b) return;
+    const m = b.dataset.memo;
+    if (m === 'close') { memoClose(); if (P && (screen === 'practice' || screen === 'diag')) rerender(); return; }
+    if (m === 'clear') return memoClear();
+    eraser = m === 'eraser';
+    memo.querySelectorAll('[data-memo=pen],[data-memo=eraser]').forEach((x) => x.classList.toggle('on', x.dataset.memo === m));
+  });
+
   // ---------- 保存 ----------
   const blank = () => ({ v: 1, profile: null, diag: null, skills: {}, log: [], goal: null, today: null, badges: {}, goalDays: [] });
   let st = load();
@@ -233,6 +267,7 @@
     window.scrollTo(0, 0);
     (SCREENS[name] || SCREENS.home)(arg);
     const inSession = name === 'practice' || name === 'diag';
+    if (!inSession) memoClose();
     nav.hidden = !st.profile || inSession || name === 'setup';
     nav.querySelectorAll('[data-go]').forEach((b) => b.classList.toggle('on', b.dataset.go === name || (name === 'lesson' && b.dataset.go === 'map')));
   }
@@ -536,6 +571,7 @@ ${items.length ? items.map((x) => { const s = SK.byId[x.skill]; return `
     render(`
 <h1 class="page-h">単元マップ</h1>
 <p class="muted small">★1：基本OK　★2：しっかり　★3：マスター</p>
+<button class="btn soft" data-act="printOpen" data-back="map">🖨 プリントを作る（紙で練習）</button>
 ${strong.length >= 2 ? `<button class="btn soft" data-act="reviewStart" data-ids="${strong.join(',')}">🔁 総復習（★1以上の単元から${REVIEW_N}問）</button>` : ''}
 ${[2, 1].map((g) => `
 <h2 class="grade-h">${g === 2 ? '中学2年' : '中学1年（復習）'}</h2>
@@ -561,7 +597,8 @@ ${SK.units.filter((u) => u.grade === g).map((u) => `
 ${pre.length ? `<div class="card warn">💡 先に <b>${pre.map((p) => esc(SK.byId[p].name)).join('、')}</b> を練習すると、もっとわかりやすくなるよ。
   <div class="row">${pre.map((p) => `<button class="btn small" data-act="lesson" data-id="${p}">${esc(SK.byId[p].name)}へ</button>`).join('')}</div></div>` : ''}
 <div class="card lesson"><div class="tag">ポイント</div>${s.lesson}</div>
-<button class="btn primary big" data-act="practice" data-id="${id}">練習する（${PRACTICE_N}問）</button>`);
+<button class="btn primary big" data-act="practice" data-id="${id}">練習する（${PRACTICE_N}問）</button>
+<button class="btn soft" data-act="printOpen" data-skill="${id}" data-back="map">🖨 この単元のプリントを作る</button>`);
   };
 
   // ----- 問題（練習・総復習・実力チェック共通） -----
@@ -654,10 +691,11 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
     if (P.done) {
       actions = `<button class="btn primary big" data-act="next">${isDiag ? '次へ' : S.i + 1 >= S.n ? '結果を見る' : '次の問題へ'}</button>`;
     } else if (isDiag) {
-      actions = `${q.choices ? '' : '<button class="btn primary big" data-act="check">答える</button>'}<button class="btn ghost" data-act="dunno">わからない</button>`;
+      actions = `${q.choices ? '' : '<button class="btn primary big" data-act="check">答える</button>'}<div class="row"><button class="btn soft" data-act="memo">${memo.hidden ? '✏️ 計算メモ' : '✏️ メモを閉じる'}</button><button class="btn soft" data-act="dunno">わからない</button></div>`;
     } else {
       actions = `${q.choices ? '' : '<button class="btn primary big" data-act="check">答え合わせ</button>'}
-<div class="row">${P.hint < q.hints.length ? `<button class="btn soft" data-act="hint">💡 ヒント（${P.hint + 1}/${q.hints.length}）</button>` : ''}<button class="btn soft" data-act="reveal">答えを見る</button></div>`;
+<div class="row">${P.hint < q.hints.length ? `<button class="btn soft" data-act="hint">💡 ヒント（${P.hint + 1}/${q.hints.length}）</button>` : ''}<button class="btn soft" data-act="reveal">答えを見る</button></div>
+<button class="btn soft" data-act="memo">${memo.hidden ? '✏️ 計算メモ（指で書けます）' : '✏️ メモを閉じる'}</button>`;
     }
     // 「もう一度」の声かけは問題のすぐ下、正解・解説は入力欄の下に出す
     return P.done ? head + body + hints + input + fb + actions : head + body + fb + hints + input + actions;
@@ -673,8 +711,11 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
       `<button class="key ${/\d/.test(k) ? '' : 'fn'} ${wide(k)}" data-act="key" data-k="${k}">${label[k] || k}</button>`)).join('')}</div>`;
   }
 
-  SCREENS.practice = SCREENS.diag = function () { render(questionHTML()); };
-  const rerender = () => render(questionHTML());
+  SCREENS.practice = SCREENS.diag = function () { rerender(); };
+  function rerender() {
+    render(questionHTML());
+    if (!memo.hidden && memoOwner !== P) { memoClear(); memoOwner = P; }
+  }
 
   function key(k) {
     if (P.done) return;
@@ -826,6 +867,92 @@ ${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft
 <button class="btn ghost" data-go="home">ホームへ</button>`);
   };
 
+  // ----- 印刷用プリント -----
+  let PR = null;
+  const KANA = ['ア', 'イ', 'ウ', 'エ'];
+  const diagWrong = () => (st.diag && st.diag.items ? st.diag.items.filter((x) => !x.ok) : []);
+  function printDefaults(opt) {
+    const src = st.goal && todayMenu().tasks.length ? 'menu' : st.diag ? 'weak' : 'units';
+    return Object.assign({ src, units: [], skill: null, n: 10, inc: { q: true, a: true, e: true }, back: 'map' }, opt || {});
+  }
+  function printSkills() {
+    if (PR.src === 'skill') return [PR.skill];
+    if (PR.src === 'menu') {
+      const ids = [];
+      todayMenu().tasks.forEach((t) => (t.kind === 'review' ? t.ids : [t.id]).forEach((id) => { if (!ids.includes(id)) ids.push(id); }));
+      return ids;
+    }
+    if (PR.src === 'weak') return recommendOrder().slice(0, 4).map((s) => s.id);
+    if (PR.src === 'units') return SK.list.filter((s) => PR.units.includes(s.unit)).map((s) => s.id);
+    return [];
+  }
+  function blankOf(p) {
+    if (p.choices) return `<div class="sh-ch">${p.choices.map((c, k) => `<span>${KANA[k]}　${c}</span>`).join('')}</div>`;
+    return `<div class="sh-blank">${p.fields.map((f) => `<span>${esc(f.label)}${f.frac ? '（分数）' : ''} <i class="ul"></i>${esc(f.post || '')}</span>`).join('')}</div>`;
+  }
+  function ansOf(p) {
+    if (p.choices) return `${KANA[p.correct]}　${p.choices[p.correct]}`;
+    return p.fields.map((f, k) => `${esc(f.label)} <b>${fmtVal(p.answer[k])}</b>${esc(f.post || '')}`).join('　');
+  }
+  // 画面のキーパッド用の案内（分母→分子の順、小数キー）は紙では不要なので出さない
+  const printForm = (p) => (!p.form || p.dec || (p.fields && p.fields.some((f) => f.frac)) ? '' : `<div class="form">答えの形：${p.form}</div>`);
+  function printItems() {
+    if (PR.src === 'diag') return diagWrong().slice(0, PR.n).map((x) => ({ name: SK.byId[x.skill].name, q: x.q, blank: '', ans: x.ans, explain: x.explain }));
+    const ids = printSkills();
+    if (!ids.length) return [];
+    let order = [];
+    while (order.length < PR.n) order = order.concat(shuffle(ids));
+    return order.slice(0, PR.n).map((id) => {
+      const sk1 = SK.byId[id], p = sk1.gen();
+      return { name: sk1.name, q: p.q + printForm(p), blank: blankOf(p), ans: ansOf(p), explain: p.explain };
+    });
+  }
+
+  SCREENS.printSetup = function (keep) {
+    if (!keep || !PR) PR = printDefaults();
+    const menuOK = st.goal && todayMenu().tasks.length, dw = diagWrong().length;
+    const opt = (k, name, sub) => `<button class="gopt ${PR.src === k ? 'on' : ''}" data-act="printSrc" data-k="${k}"><span><b>${name}</b>${sub ? `<small>${sub}</small>` : ''}</span></button>`;
+    render(`
+<button class="back" data-go="${PR.back}">‹ 戻る</button>
+<h1 class="page-h">プリントを作る</h1>
+<p class="muted small">紙に印刷して、途中式を書きながら解けます。PDFにして保存もできます。</p>
+<div class="card">
+  <div class="lbl">問題の範囲</div>
+  ${PR.skill ? opt('skill', esc(SK.byId[PR.skill].name), 'この単元だけ') : ''}
+  ${menuOK ? opt('menu', '今日のメニュー', todayMenu().tasks.map((t) => esc(taskName(t))).join('・')) : ''}
+  ${st.diag ? opt('weak', '苦手な単元', 'おすすめ順に4つの単元から') : ''}
+  ${opt('units', '単元を選ぶ', '')}
+  ${dw ? opt('diag', '実力チェックで間違えた問題', `${dw}問（同じ問題をもう一度）`) : ''}
+  ${PR.src === 'units' ? `<div class="units">${[2, 1].map((g) => SK.units.filter((u) => u.grade === g).map((u) => `<button class="uopt ${PR.units.includes(u.id) ? 'on' : ''}" data-act="printUnit" data-u="${u.id}">${PR.units.includes(u.id) ? '☑' : '☐'} ${g === 1 ? '中1 ' : ''}${esc(u.name)}</button>`).join('')).join('')}</div>` : ''}
+  <div class="lbl">問題数</div>
+  <div class="seg three">${[5, 10, 20].map((n) => `<button class="${PR.n === n ? 'on' : ''}" data-act="printN" data-n="${n}">${n}問</button>`).join('')}</div>
+  ${PR.src === 'diag' ? `<p class="note">間違えた問題が${dw}問なので、最大${dw}問になります。</p>` : ''}
+  <div class="lbl">印刷する内容</div>
+  <div class="seg three">${[['q', '問題'], ['a', '解答'], ['e', '解説']].map(([k, n]) => `<button class="${PR.inc[k] ? 'on' : ''}" data-act="printInc" data-k="${k}">${PR.inc[k] ? '☑' : '☐'} ${n}</button>`).join('')}</div>
+  <p class="note">解答・解説は、問題とは別のページに印刷されます。答え合わせのときに使えます。</p>
+</div>
+<button class="btn primary big" data-act="printMake">プリントを作る</button>`);
+  };
+
+  SCREENS.printPreview = function () {
+    const it = PR.items, inc = PR.inc, d = parseDay(today());
+    const title = { skill: SK.byId[PR.skill || 's1_addsub'].name, menu: '今日のメニュー', weak: '苦手な単元', units: PR.units.map((u) => SK.unitById[u].name).join('・'), diag: '実力チェックの見直し' }[PR.src];
+    const head = (sub) => `<div class="sh-head"><div><b>まなびステップ　練習プリント</b>${sub ? `<span class="sh-sub">${sub}</span>` : ''}</div><div class="sh-meta">${esc(title)}　${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日　名前（　　　　　　　）</div></div>`;
+    const qs = inc.q ? `<section class="sh-page">${head('')}<ol class="sh-qs">${it.map((x) => `<li class="sh-q"><div class="sh-skill">${esc(x.name)}</div><div class="q">${x.q}</div>${x.blank}<div class="sh-work"></div></li>`).join('')}</ol></section>` : '';
+    const as = inc.a || inc.e ? `<section class="sh-page ${inc.q ? 'brk' : ''}">${head(inc.a && inc.e ? '解答・解説' : inc.a ? '解答' : '解説')}<ol class="sh-as">${it.map((x) => `<li class="sh-a">${inc.q ? '' : `<div class="sh-skill">${esc(x.name)}</div><div class="q">${x.q}</div>`}${inc.a ? `<div class="sh-ans">答え　${x.ans}</div>` : ''}${inc.e ? `<div class="exp">${x.explain}</div>` : ''}</li>`).join('')}</ol></section>` : '';
+    render(`
+<div class="no-print">
+  <button class="back" data-act="printBack">‹ 設定にもどる</button>
+  <div class="card">
+    <b>プリントができました（${it.length}問）</b>
+    <button class="btn primary big" data-act="printNow">🖨 印刷する / PDFで保存</button>
+    ${PR.src === 'diag' ? '' : '<button class="btn soft" data-act="printMake">🔄 別の問題で作り直す</button>'}
+    <p class="note">PDFで保存するときは、印刷の画面で送信先（プリンター）を「PDFに保存」にしてください。下はプレビューです。</p>
+  </div>
+</div>
+<div class="sheet">${qs}${as}</div>`);
+  };
+
   // ----- 学習記録 -----
   SCREENS.records = function () {
     const all = totals(), s = streak(), L = levelOf(xp());
@@ -868,7 +995,8 @@ ${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft
 </div>
 <div class="card no-print">
   <b>保存・出力</b>
-  <button class="btn soft" data-act="print">🖨 印刷 / PDFで保存</button>
+  <button class="btn soft" data-act="printOpen" data-back="records">📝 練習プリントを作る</button>
+  <button class="btn soft" data-act="print">🖨 この記録を印刷 / PDFで保存</button>
   <button class="btn soft" data-act="export">💾 バックアップを保存（ファイル）</button>
   <label class="btn soft">📂 バックアップから復元<input type="file" accept=".json,application/json" id="imp" hidden></label>
   <p class="note">機種変更のときは、バックアップファイルを新しい端末で復元してください。</p>
@@ -1017,6 +1145,21 @@ ${cancel}
       st.goal = null; st.today = null; save(); G = null; go('home');
     },
     print: () => window.print(),
+    memo: () => { if (memo.hidden) memoOpen(); else memoClose(); rerender(); },
+    printOpen: (d) => { PR = printDefaults(d.skill ? { src: 'skill', skill: d.skill, back: d.back } : { back: d.back }); go('printSetup', true); },
+    printSrc: (d) => { PR.src = d.k; go('printSetup', true); },
+    printUnit: (d) => { const u = PR.units, i = u.indexOf(d.u); if (i >= 0) u.splice(i, 1); else u.push(d.u); go('printSetup', true); },
+    printN: (d) => { PR.n = Number(d.n); go('printSetup', true); },
+    printInc: (d) => { PR.inc[d.k] = !PR.inc[d.k]; go('printSetup', true); },
+    printBack: () => go('printSetup', true),
+    printMake: () => {
+      if (!PR.inc.q && !PR.inc.a && !PR.inc.e) return toast('問題・解答・解説のどれかを選んでね');
+      if (PR.src === 'units' && !PR.units.length) return toast('単元を1つ以上選んでね');
+      PR.items = printItems();
+      if (!PR.items.length) return toast('プリントにできる問題がありません');
+      go('printPreview');
+    },
+    printNow: () => window.print(),
     export: exportFile,
     rename: () => go('setup'),
     resetStep: (d) => go('reset', Number(d.step)),
