@@ -197,7 +197,9 @@ label.btn { cursor: pointer; }
 /* 印刷 */
 .print-only { display: none; }
 @media print {
-  :root { --bg: #fff; --card: #fff; --text: #000; --muted: #444; --line: #ccc; }
+  /* ダークモードでも、印刷は白い紙に黒い文字にする（ダークモードの指定より強く） */
+  :root, :root:not([data-theme="light"]) { --bg: #fff; --card: #fff; --text: #000; --muted: #444; --line: #ccc; --soft: #f1f3f8; --primary: #3550d8; --primary-ink: #fff; --ok: #1e7a50; --ok-bg: #e5f7ef; --ng: #c0392b; --ng-bg: #fdecec; --warn-bg: #fff7e0; }
+  body { color: #000; }
   body { background: #fff; }
   #nav, .no-print, #toast { display: none !important; }
   .print-only { display: block; }
@@ -368,3 +370,12 @@ body.memo-open #app { padding-bottom: calc(46vh + 24px); }
 .mini-tbl th, .mini-tbl td { padding: 3px 4px; text-align: center; border-top: 1px solid var(--line); white-space: nowrap; }
 .mini-tbl th { text-align: center; font-weight: 600; font-size: .75rem; }
 .conds:has(.mini-tbl) { overflow-x: auto; }
+
+/* 長文読解 */
+.passage { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; background: var(--soft); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; font-size: .95rem; font-weight: 400; line-height: 1.9; }
+.passage p { margin: 0 0 .4em; text-indent: 1em; }
+.passage p.ni { text-indent: 0; }
+.passage u { text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.ptitle { font-weight: 700; text-align: center; margin-bottom: 6px; text-indent: 0; }
+.pq { font-weight: 700; }
+.sheet .passage { max-height: none; overflow: visible; background: none; border: 1px solid #ccc; font-size: .85rem; }

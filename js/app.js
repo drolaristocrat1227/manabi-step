@@ -943,9 +943,12 @@ ${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft
     if (!ids.length) return [];
     let order = [];
     while (order.length < PR.n) order = order.concat(shuffle(ids));
+    let prev = null; // 読解：同じ文章が続くときは、文章を1回だけ印刷する
     return order.slice(0, PR.n).map((id) => {
       const sk1 = SK.byId[id], p = sk1.gen();
-      return { name: sk1.name, q: p.q + printForm(p), blank: blankOf(p), ans: ansOf(p), explain: p.explain };
+      const q = p.passage && p.passage === prev ? p.stem : p.q;
+      prev = p.passage || null;
+      return { name: sk1.name, q: q + printForm(p), blank: blankOf(p), ans: ansOf(p), explain: p.explain };
     });
   }
 
