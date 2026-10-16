@@ -379,3 +379,7 @@ body.memo-open #app { padding-bottom: calc(46vh + 24px); }
 .ptitle { font-weight: 700; text-align: center; margin-bottom: 6px; text-indent: 0; }
 .pq { font-weight: 700; }
 .sheet .passage { max-height: none; overflow: visible; background: none; border: 1px solid #ccc; font-size: .85rem; }
+
+/* 前回の続き */
+.card.resume { border: 2px solid var(--primary); background: var(--soft); }
+.card.resume h3 { margin: 4px 0; }

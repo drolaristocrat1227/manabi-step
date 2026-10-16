@@ -281,8 +281,16 @@
 
   // ---------- 画面切りかえ ----------
   let screen = 'home';
-  function go(name, arg) {
+  const SESSION = (n) => n === 'practice' || n === 'diag';
+  // opt.pop：「戻る」で来たとき（履歴を足さない）、opt.replace：今の履歴を置きかえる
+  function go(name, arg, opt) {
+    opt = opt || {};
     screen = name;
+    try {
+      const state = { s: name, a: arg === undefined ? null : arg };
+      if (opt.pop) { /* 何もしない */ } else if (opt.replace || !history.state) history.replaceState(state, '');
+      else history.pushState(state, '');
+    } catch (e) { /* 履歴が使えない環境でも動く */ }
     window.scrollTo(0, 0);
     (SCREENS[name] || SCREENS.home)(arg);
     const inSession = name === 'practice' || name === 'diag';
@@ -389,6 +397,9 @@ ${r ? `<div class="card"><div class="tag">おすすめ</div><h3>${esc(r.name)}</
 <button class="btn primary big" data-act="lesson" data-id="${r.id}">はじめる（${PRACTICE_N}問）</button></div>` : `<div class="card accent"><h2>🎉 全スキル マスター！</h2><p>すごい！好きな単元で腕だめししよう。</p></div>`));
     }
     const subs = SUBJECTS.map((x) => [x, courseOf(SK.group, x[0])]).filter((x) => x[1]);
+    const rl = resumeLabel();
+    if (rl) main = `<div class="card resume"><div class="tag">前回の続き</div><h3>📌 ${rl}</h3><p class="muted small">途中までの答えはそのまま残っています。</p>
+<button class="btn primary big" data-act="resume">続きから再開</button><button class="btn ghost" data-act="resumeDrop">続きを破棄する</button></div>` + main;
     render(`
 ${subs.length > 1 ? `<div class="subjbar">${subs.map(([x, c]) => `<button class="${c === course ? 'on' : ''}" data-act="switchSubj" data-c="${c}"><span>${x[1]}</span>${c === course ? subjName(SK) : subjName(window.COURSES[c])}</button>`).join('')}</div>` : ''}
 <div class="greet">${hello}、<b>${esc(p.name)}</b> さん</div>
@@ -499,7 +510,7 @@ ${p.days.map((d, i) => `<div class="pday ${i === 0 ? 'now' : ''}"><div class="pd
     if (!D.queue.length) return finishDiag();
     const id = D.queue[0];
     P = newQ({ mode: 'diag', skill: SK.byId[id] });
-    go('diag');
+    go('diag', undefined, { replace: screen === 'diag' });
   }
   function diagAnswer(correct) {
     const id = P.skill.id;
@@ -536,9 +547,10 @@ ${p.days.map((d, i) => `<div class="pday ${i === 0 ? 'now' : ''}"><div class="pd
     st.log.push({ d: today(), t: Date.now(), mode: 'diag', skill: null, q: n, c, sec });
     st.today = null; // 結果に合わせて今日のメニューを作り直す
     save();
-    D = null;
+    D = null; P = null;
+    st.resume = null; save();
     newBadges = checkBadges();
-    go('diagResult');
+    go('diagResult', undefined, { replace: true });
   }
 
   SCREENS.diagResult = function () {
@@ -741,8 +753,37 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
   }
 
   SCREENS.practice = SCREENS.diag = function () { rerender(); };
+  // 学習中の状態（今の問題・入力・進み具合）を端末に保存する
+  function saveSession() {
+    if (!P || !SESSION(screen)) return;
+    const pq = Object.assign({}, P, { skill: P.skill.id });
+    st.resume = P.mode === 'diag'
+      ? { type: 'diag', D: { queue: D.queue, tested: D.tested, start: D.start, items: D.items }, P: pq, at: Date.now() }
+      : { type: 'practice', S: Object.assign({}, S), P: pq, at: Date.now() };
+    save();
+  }
+  function clearSession() { if (st.resume) { st.resume = null; save(); } }
+  // 保存した続きから再開する
+  function resumeSession() {
+    const r = st.resume;
+    try {
+      const sk1 = SK.byId[r.P.skill];
+      if (!sk1) throw new Error('skill');
+      P = Object.assign({}, r.P, { skill: sk1 });
+      if (r.type === 'diag') { D = r.D; S = null; go('diag'); }
+      else { S = r.S; if (S.ids.some((id) => !SK.byId[id])) throw new Error('skill'); go('practice'); }
+    } catch (e) { clearSession(); toast('続きを読みこめませんでした'); go('home'); }
+  }
+  function resumeLabel() {
+    const r = st.resume;
+    if (!r || !SK.byId[r.P && r.P.skill]) return null;
+    if (r.type === 'diag') { const n = Object.keys(r.D.tested).length; return `実力チェック（${n + 1}問目 / 全${n + r.D.queue.length}問）`; }
+    return `${r.S.mixed ? '総復習' : esc(SK.byId[r.S.ids[0]].name)}（${r.S.i + 1}問目 / 全${r.S.n}問）`;
+  }
+
   function rerender() {
     render(questionHTML());
+    saveSession();
     if (!memo.hidden && memoOwner !== P) { memoClear(); memoOwner = P; }
   }
 
@@ -866,9 +907,11 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
       }
     }
     save();
+    st.resume = null; P = null;
+    save();
     S.badges = checkBadges();
     S.lvAfter = levelOf(xp()).lv;
-    go('summary');
+    go('summary', undefined, { replace: true });
   }
 
   SCREENS.summary = function () {
@@ -1199,9 +1242,14 @@ ${cancel}
     next,
     quitPractice: () => {
       if (!confirm('練習をやめますか？（ここまでの結果は残ります）')) return;
-      if (S.results.length) finishPractice(); else if (S.mixed) go('home'); else go('lesson', S.ids[0]);
+      if (S.results.length) return finishPractice();
+      const back = S.mixed ? null : S.ids[0];
+      S = null; P = null; clearSession();
+      if (back) go('lesson', back, { replace: true }); else go('home', undefined, { replace: true });
     },
-    quitDiag: () => { if (confirm('実力チェックをやめますか？（結果は保存されません）')) { D = null; go('home'); } },
+    quitDiag: () => { if (confirm('実力チェックをやめますか？（結果は保存されません）')) { D = null; P = null; clearSession(); go('home', undefined, { replace: true }); } },
+    resume: () => resumeSession(),
+    resumeDrop: () => { if (confirm('前回の続きを破棄しますか？')) { clearSession(); go('home', undefined, { replace: true }); } },
     // 目標の設定
     goalType: (d) => { readGoalForm(); G.type = d.k; go('goal', true); },
     goalDaily: (d) => { readGoalForm(); G.daily = Number(d.n); go('goal', true); },
@@ -1251,6 +1299,7 @@ ${cancel}
     rename: () => go('setup'),
     resetStep: (d) => go('reset', Number(d.step)),
     doReset: () => {
+      P = null; S = null; D = null;
       try { localStorage.removeItem(KEY); } catch (e) { /* 消せない環境でも画面上は初期化する */ }
       st = blank();
       toast('すべての記録を削除しました');
@@ -1276,10 +1325,23 @@ ${cancel}
     else if (e.key === 'Enter') check();
   });
 
+  // ブラウザ・スマホの「戻る」：学習中はその場にとどまり、それ以外はアプリ内の前の画面へ
+  window.addEventListener('popstate', (e) => {
+    if (SESSION(screen) && P && (P.mode === 'diag' ? D : S)) {
+      try { history.pushState({ s: screen, a: null }, ''); } catch (err) { /* そのまま */ }
+      return toast('学習中です。やめるときは左上の × を押してね（途中までの内容は保存されています）');
+    }
+    const t = e.state || { s: st.profile ? 'home' : 'setup', a: null };
+    // その場でしか作れない画面（結果・プリント・問題）に戻ってきたときは、ホームへ
+    const needs = { practice: false, diag: false, summary: !!S, printPreview: !!(PR && PR.items), diagResult: !!st.diag, diagReview: !!st.diag, plan: !!st.goal };
+    const name = t.s in needs && !needs[t.s] ? 'home' : t.s;
+    go(name, t.a, { pop: true });
+  });
+
   // オフライン対応（http/https で開いたときだけ）
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
-  go(st.profile ? 'home' : 'setup');
+  go(st.profile ? 'home' : 'setup', undefined, { replace: true });
 })();
