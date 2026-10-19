@@ -159,12 +159,9 @@
   const TITLES = SK.titles;
   const AHEAD_SET_PT = 10, AHEAD_DAY_PT = 30;
   const aheadOf = () => st.ahead || { sets: 0, days: 0 };
-  function xpOf(o) {
-    const a = (o && o.ahead) || { sets: 0, days: 0 };
-    return ((o && o.log) || []).reduce((acc, l) => acc + l.c * 10 + (l.mode === 'diag' ? 50 : 20), 0) + a.sets * AHEAD_SET_PT + a.days * AHEAD_DAY_PT;
-  }
   function xp() {
-    return xpOf(st);
+    const a = aheadOf();
+    return st.log.reduce((acc, l) => acc + l.c * 10 + (l.mode === 'diag' ? 50 : 20), 0) + a.sets * AHEAD_SET_PT + a.days * AHEAD_DAY_PT;
   }
   function levelOf(x) {
     let lv = 1; while (x >= 50 * lv * (lv + 1)) lv++;          // 次のレベルまで：100, 300, 600, 1000 …
@@ -334,7 +331,6 @@
   // opt.pop：「戻る」で来たとき（履歴を足さない）、opt.replace：今の履歴を置きかえる
   function go(name, arg, opt) {
     opt = opt || {};
-    if (screen === 'myroom' && name !== 'myroom') roomLeave();
     screen = name;
     try {
       const state = { s: name, a: arg === undefined ? null : arg };
@@ -488,7 +484,7 @@ ${r ? `<div class="card"><div class="tag">おすすめ</div><h3>${esc(r.name)}</
     render(`
 ${subs.length > 1 ? `<div class="subjbar">${subs.map(([x, c]) => `<button class="${c === course ? 'on' : ''}" data-act="switchSubj" data-c="${c}"><span>${x[1]}</span>${c === course ? subjName(SK) : subjName(window.COURSES[c])}</button>`).join('')}</div>` : ''}
 ${st.coach ? homeCoach(rl, s, h) : `<div class="greet">${hello}、<b>${esc(p.name)}</b> さん</div>${coachPickCard()}`}
-<div class="lvcard"><button class="lv-av" data-go="myroom" aria-label="マイルーム">${MR.avatarSVG(loadMy().avatar)}<span class="lv">Lv.${L.lv}</span></button><div class="lvt"><b>${esc(L.title)}</b><div class="bar sm"><i style="width:${L.pct}%"></i></div><span class="muted small">次のレベルまで ${L.rest} pt</span></div></div>
+<div class="lvcard"><div class="lv">Lv.${L.lv}</div><div class="lvt"><b>${esc(L.title)}</b><div class="bar sm"><i style="width:${L.pct}%"></i></div><span class="muted small">次のレベルまで ${L.rest} pt</span></div></div>
 <div class="stats">
   <div class="stat"><div class="v">🔥 ${s}</div><div class="k">日連続</div></div>
   <div class="stat"><div class="v">${t.q}</div><div class="k">今日の問題</div></div>
@@ -1196,49 +1192,6 @@ ${t && t < 3 ? `<p class="note center">あと${t === 1 ? '★2で銀' : '★3で
 <button class="btn primary big" data-act="practice" data-id="${id}">練習する（${PRACTICE_N}問）</button>`);
   };
 
-  // ----- マイルーム（アバターと部屋。同じ学年の全教科で共通、ポイントも全教科の合計） -----
-  const MR = window.MYROOM;
-  const myKey = () => (DEMO ? 'manabi-demo-' : 'manabi-step-') + 'my-' + SK.group;
-  function loadMy() {
-    let o = null;
-    try { o = JSON.parse(localStorage.getItem(myKey()) || 'null'); } catch (e) { /* なければ新しく */ }
-    o = o || {};
-    return { avatar: Object.assign({}, MR.DEFAULT.avatar, o.avatar), room: Object.assign({}, MR.DEFAULT.room, o.room), owned: o.owned || [], spent: o.spent || 0, time: o.time || {} };
-  }
-  function saveMy(m) { try { localStorage.setItem(myKey(), JSON.stringify(m)); } catch (e) { toast('保存できませんでした'); } }
-  // 同じ学年の全教科で集めたポイント
-  const totalPts = () => SUBJECTS.map((x) => courseOf(SK.group, x[0])).filter(Boolean).reduce((a, c) => a + xpOf(c === course ? st : peek(c)), 0);
-  const ownedIt = (m, it) => it.price === 0 || m.owned.includes(it.cat + ':' + it.id);
-  // 金のカードを5枚集めると、トロフィーを飾れる（交換では手に入らない）
-  const goldCount = () => SUBJECTS.map((x) => courseOf(SK.group, x[0])).filter(Boolean).reduce((a, c) => { const o = c === course ? st : peek(c); return a + Object.values((o && o.cards) || {}).filter((t) => t === 3).length; }, 0);
-  const ROOM_LIMIT = 600; // 1日にマイルームにいる時間の目安（秒）
-  let roomEnter = 0;
-  function roomLeave() {
-    if (!roomEnter) return;
-    const m = loadMy(), d = today();
-    m.time = { [d]: (m.time[d] || 0) + Math.round((Date.now() - roomEnter) / 1000) };
-    roomEnter = 0; saveMy(m);
-  }
-  SCREENS.myroom = function (tab) {
-    tab = tab || 'avatar';
-    if (!roomEnter) roomEnter = Date.now();
-    const m = loadMy(), pts = totalPts() - m.spent, av = MR.avatarSVG(m.avatar);
-    const usedToday = (m.time[today()] || 0) + Math.round((Date.now() - roomEnter) / 1000);
-    const cats = MR.CATS.filter((c) => c[2] === tab);
-    const using = (it) => (it.cat === 'item' ? m.room.items.includes(it.id) : (tab === 'avatar' ? m.avatar : m.room)[it.cat] === it.id);
-    render(`
-<h1 class="page-h">マイルーム</h1>
-<div class="room-wrap">${MR.roomSVG(m.room, av, goldCount() >= 5)}</div>
-<div class="pts-row"><span>🪙 使えるポイント <b>${pts}</b> pt</span><span class="muted small">ためた合計 ${totalPts()} pt</span></div>
-${usedToday >= ROOM_LIMIT ? (bubble('room_long', 'normal') || '<div class="card warn">マイルームはこのくらいにして、勉強にもどろう！</div>') + '<button class="btn primary" data-go="home">勉強にもどる</button>' : ''}
-<div class="seg two room-tabs"><button class="${tab === 'avatar' ? 'on' : ''}" data-act="roomTab" data-t="avatar">👕 きせかえ</button><button class="${tab === 'room' ? 'on' : ''}" data-act="roomTab" data-t="room">🛋 模様替え</button></div>
-${cats.map(([cat, name]) => `<div class="card"><div class="unit-h">${name}${cat === 'item' ? '<small class="muted">（タップで置く・しまう）</small>' : ''}</div><div class="shop">${MR.ITEMS.filter((it) => it.cat === cat).map((it) => {
-      const own = ownedIt(m, it), use = using(it);
-      return `<button class="shop-it ${use ? 'on' : ''} ${own ? '' : 'lock'}" data-act="myItem" data-cat="${cat}" data-id="${it.id}">${MR.swatch(it, m.avatar)}<b>${esc(it.name)}</b><small>${use ? '使用中' : own ? (cat === 'item' ? 'しまってある' : 'もっている') : '🪙 ' + it.price}</small></button>`;
-    }).join('')}</div></div>`).join('')}
-<p class="note center">ポイントは勉強するとたまります（正解・練習・前倒しなど）。使ってもレベルは下がりません。${goldCount() >= 5 ? '' : '<br>金のカードを5枚集めると、トロフィーが部屋に飾られます（いま ' + goldCount() + '枚）。'}</p>`);
-  };
-
   // ----- 学習記録 -----
   SCREENS.records = function () {
     const all = totals(), s = streak(), L = levelOf(xp());
@@ -1454,7 +1407,7 @@ ${cancel}
 
   // ---------- 保存・出力 ----------
   function exportFile() {
-    const blob = new Blob([JSON.stringify(Object.assign({ course, my: loadMy() }, st), null, 1)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(Object.assign({ course }, st), null, 1)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'manabi-backup-' + course + '-' + today() + '.json';
@@ -1471,8 +1424,7 @@ ${cancel}
         const o = JSON.parse(rd.result);
         if (!o || o.v !== 1 || !o.profile || !Array.isArray(o.log) || typeof o.skills !== 'object') throw new Error('bad');
         if ((o.course || 'j2') !== course) { const C = window.COURSES[o.course || 'j2']; return toast(`このファイルは「${C ? C.title : '別の学年'}」のバックアップです。学年を切りかえてから復元してね`); }
-        if (o.my) saveMy(o.my);
-        delete o.course; delete o.my;
+        delete o.course;
         if (!confirm('今の記録をバックアップの内容で置きかえます。よろしいですか？')) return;
         st = Object.assign(blank(), o); save(); toast('復元しました'); go('home');
       } catch (err) { toast('このファイルは読み込めませんでした'); }
@@ -1548,27 +1500,10 @@ ${cancel}
     },
     quitDiag: () => { if (confirm('実力チェックをやめますか？（結果は保存されません）')) { D = null; P = null; clearSession(); go('home', undefined, { replace: true }); } },
     resume: () => resumeSession(),
-    roomTab: (d) => go('myroom', d.t, { replace: true }),
-    myItem: (d) => {
-      const m = loadMy(), it = MR.get(d.cat, d.id), tab = MR.CATS.find((c) => c[0] === d.cat)[2];
-      if (!ownedIt(m, it)) {
-        const pts = totalPts() - m.spent;
-        if (pts < it.price) return toast(`ポイントが足りないよ（あと ${it.price - pts} pt）。勉強してためよう！`);
-        if (!confirm(`「${it.name}」を ${it.price} pt と交換しますか？`)) return;
-        m.owned.push(it.cat + ':' + it.id); m.spent += it.price;
-        toast(`「${it.name}」を手に入れた！`);
-      }
-      if (d.cat === 'item') { const i = m.room.items.indexOf(d.id); if (i >= 0) m.room.items.splice(i, 1); else m.room.items.push(d.id); }
-      else (tab === 'avatar' ? m.avatar : m.room)[d.cat] = d.id;
-      saveMy(m);
-      const y = window.scrollY; go('myroom', tab, { replace: true }); window.scrollTo(0, y);
-    },
     cardOpen: (d) => go('card', d.id),
     coachPick: (d) => {
       const first = !st.coach;
       st.coach = d.c; save();
-      // 同じ学年のほかの教科のコーチも、同じにそろえる
-      SUBJECTS.map((x) => courseOf(SK.group, x[0])).filter((c) => c && c !== course).forEach((c) => { const o = peek(c); if (o) { o.coach = d.c; try { localStorage.setItem(storeKey(c), JSON.stringify(o)); } catch (e) { /* そのまま */ } } });
       toast(`${CO.byId(d.c).name}が、あなたのコーチになりました！`);
       go(first || screen === 'home' ? 'home' : 'coach', undefined, { replace: true });
     },
@@ -1714,10 +1649,5 @@ ${cancel}
     document.body.classList.add('demo');
   }
   if (st.profile && syncCards().length) save();
-  // コーチは同じ学年の教科で共通にする（まだ選んでいない教科は、ほかの教科のコーチを引きつぐ）
-  if (st.profile && !st.coach) {
-    const from = SUBJECTS.map((x) => courseOf(SK.group, x[0])).filter((c) => c && c !== course).map(peek).find((o) => o && o.coach);
-    if (from) { st.coach = from.coach; save(); }
-  }
   go(st.profile ? 'home' : 'setup', undefined, { replace: true });
 })();
