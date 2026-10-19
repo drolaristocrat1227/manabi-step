@@ -391,3 +391,9 @@ body.memo-open #app { padding-bottom: calc(46vh + 24px); }
 .task.ahead .ck { background: #fff1d6; color: #b8730a; }
 .task.ahead.done .ck { background: var(--ok); color: #fff; }
 .note.center { text-align: center; }
+
+/* 保護者メニュー・デモ表示 */
+.inp.pin { letter-spacing: .5em; text-align: center; font-size: 1.3rem; margin-top: 8px; }
+#demobar { position: sticky; top: 0; z-index: 9; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 12px; background: #f5a623; color: #1f2a44; font-size: .8rem; font-weight: 700; }
+#demobar button { border: 0; background: #1f2a44; color: #fff; border-radius: 99px; padding: 3px 12px; font-size: .8rem; font-weight: 700; }
+@media print { #demobar { display: none; } }

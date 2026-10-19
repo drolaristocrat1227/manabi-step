@@ -7,7 +7,9 @@
 
   // 学年（コース）ごとに、記録を別々のキーに保存する（中2は以前からのキーのまま）
   const COURSE_KEY = 'manabi-step-course';
-  const storeKey = (c) => (c === 'j2' ? 'manabi-step-v1' : 'manabi-step-' + c + '-v1');
+  let DEMO = false;
+  try { DEMO = sessionStorage.getItem('manabi-step-demo') === '1'; } catch (e) { /* 使えない環境ではデモなし */ }
+  const storeKey = (c) => (DEMO ? 'manabi-demo-' + c : c === 'j2' ? 'manabi-step-v1' : 'manabi-step-' + c + '-v1');
   let course = 'j2';
   try { const c = localStorage.getItem(COURSE_KEY); if (c && window.COURSES[c]) course = c; } catch (e) { /* 既定は中2 */ }
   const SK = window.COURSES[course];
@@ -1146,7 +1148,7 @@ ${aheadOf().sets ? `<div class="card"><b>🚀 前倒しの記録</b><p>前倒し
   <button class="btn soft" data-act="diagIntro">実力チェックをやり直す</button>
 </div>
 <p class="privacy no-print">🔒 記録はこの端末の中だけに保存され、外部には送信されません。</p>
-<details class="more no-print"><summary>その他</summary><button class="linkish" data-go="reset">データの初期化</button></details>`);
+<details class="more no-print"><summary>その他</summary><button class="linkish" data-go="owner">保護者メニュー</button><button class="linkish" data-go="reset">データの初期化</button></details>`);
     const imp = document.getElementById('imp');
     if (imp) imp.addEventListener('change', importFile);
   };
@@ -1161,6 +1163,102 @@ ${aheadOf().sets ? `<div class="card"><b>🚀 前倒しの記録</b><p>前倒し
 ${GROUPS.flatMap(([g]) => SUBJECTS.map(([k]) => courseOf(g, k)).filter(Boolean)).map((c) => { const o = c === course ? st : peek(c); return `<button class="gopt ${c === course ? 'on' : ''}" data-act="switchCourse" data-c="${c}"><span><b>${esc(window.COURSES[c].title)}</b><small>${o ? esc(o.profile.name) + ' さん' : 'まだ使っていません'}${c === course ? '（いま使用中）' : ''}</small></span></button>`; }).join('')}
 </div>`);
   };
+
+  // ----- 保護者メニュー（暗証番号つき。子どもが答えを見られないようにする簡単な鍵） -----
+  const OWNER_KEY = 'manabi-step-owner';
+  let ownerOK = false;
+  const pinHash = (pin) => String([...(pin + ':manabi-step')].reduce((a, c) => (Math.imul(a, 31) + c.charCodeAt(0)) >>> 0, 7));
+  function ownerData() { try { return JSON.parse(localStorage.getItem(OWNER_KEY) || 'null'); } catch (e) { return null; } }
+  const pinInput = (id, ph) => `<input id="${id}" class="inp pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="${ph}">`;
+  SCREENS.owner = function (mode) {
+    const od = ownerData();
+    if (!od || mode === 'change') {
+      return render(`
+<button class="back" data-go="records">‹ 学習の記録</button>
+<h1 class="page-h">保護者メニュー</h1>
+<div class="card"><b>${od ? '新しい暗証番号' : '暗証番号を決めてください'}</b>
+  <p class="muted small">保護者メニューを開くための4けたの数字です。お子さんが問題の答えを見られないようにするための、簡単な鍵です。</p>
+  ${pinInput('pin1', '4けたの数字')}${pinInput('pin2', 'もう一度')}
+  <button class="btn primary big" data-act="ownerSet">決定</button></div>`);
+    }
+    if (!ownerOK) {
+      return render(`
+<button class="back" data-go="records">‹ 学習の記録</button>
+<h1 class="page-h">保護者メニュー</h1>
+<div class="card"><b>暗証番号を入れてください</b>${pinInput('pin1', '4けたの数字')}
+  <button class="btn primary big" data-act="ownerLogin">開く</button></div>
+<details class="more"><summary>暗証番号を忘れたとき</summary><p class="note">「リセット」と入力して決定すると、暗証番号だけを消して設定し直せます（学習の記録は消えません）。</p><input id="pinreset" class="inp" placeholder="リセット"><button class="btn soft" data-act="ownerReset">暗証番号を消す</button></details>`);
+    }
+    render(`
+<button class="back" data-go="records">‹ 学習の記録</button>
+<h1 class="page-h">保護者メニュー</h1>
+<div class="card"><b>🔍 デモデータで画面を見る</b>
+  <p class="muted small">実力チェック済み・目標設定済み・2週間分の記録がある状態で、すべての画面を確認できます。デモ用のデータは別の場所に保存するので、本当の記録には影響しません。</p>
+  ${DEMO ? '<button class="btn soft" data-act="demoExit">デモを終了して本当の画面にもどる</button>' : '<button class="btn primary big" data-act="demoStart">デモ表示をはじめる</button>'}</div>
+<div class="card"><b>📝 問題を確認する</b>
+  <p class="muted small">各単元の問題を、答え・解説つきで見られます。記録には残りません。</p>
+  <button class="btn soft" data-go="ownerQ">問題の一覧を開く</button></div>
+<div class="card"><b>🔑 暗証番号</b><button class="btn soft" data-act="ownerChange">暗証番号を変更する</button></div>`);
+  };
+  SCREENS.ownerQ = function () {
+    if (!ownerOK) return go('owner', undefined, { replace: true });
+    render(`
+<button class="back" data-go="owner">‹ 保護者メニュー</button>
+<h1 class="page-h">問題を確認する</h1>
+<p class="muted small">${esc(SK.title)}。ほかの教科はホームの教科タブで切りかえてから開いてください。</p>
+${[SK.main, PREV].map((g) => `<h2 class="grade-h">${SK.gradeTitle[g]}</h2>${SK.units.filter((u) => u.grade === g).map((u) => `<div class="card"><div class="unit-h">${esc(u.name)}</div>${u.skills.map((id) => `<button class="skill" data-act="ownerSkill" data-id="${id}"><span class="nm">${esc(SK.byId[id].name)}</span><span class="muted small">見る ›</span></button>`).join('')}</div>`).join('')}`).join('')}`);
+  };
+  SCREENS.ownerSkill = function (id) {
+    if (!ownerOK || !SK.byId[id]) return go('owner', undefined, { replace: true });
+    const s1 = SK.byId[id];
+    const qs = Array.from({ length: 3 }, () => s1.gen());
+    render(`
+<button class="back" data-go="ownerQ">‹ 問題の一覧</button>
+<h1 class="page-h">${esc(s1.name)}</h1>
+<p class="muted small">${gname(s1.grade)}・${esc(SK.unitById[s1.unit].name)}　${s1.diag === false ? '（実力チェックでは出題しない）' : ''}</p>
+${qs.map((q, k) => `<div class="card rv"><div class="rv-h"><span class="muted small">例 ${k + 1}</span></div><div class="q">${q.q}</div>
+  ${q.choices ? `<div class="sh-ch">${q.choices.map((c, i) => `<span>${KANA[i]}　${c}</span>`).join('')}</div>` : q.order ? `<div class="sh-ord">（ ${q.order.tokens.map(esc).join(' / ')} ）</div>` : ''}
+  <div class="rv-a"><span class="muted small">正解</span><div>${ansOf(q)}</div></div>
+  <div class="rv-a"><span class="muted small">ヒント</span><div class="small">${q.hints.join('<br>')}</div></div>
+  <details open><summary>解説</summary><div class="exp">${q.explain}</div></details></div>`).join('')}
+<button class="btn primary big" data-act="ownerSkill" data-id="${id}">🔄 別の問題を見る</button>`);
+  };
+
+  // デモ用の記録（実力チェック・目標・2週間分の学習・バッジ・前倒し）を作る
+  function seedDemo() {
+    st = blank();
+    st.profile = { name: 'デモ', course, created: today() };
+    const results = {}, items = [];
+    SK.list.forEach((x, i) => {
+      const main = x.grade === SK.main;
+      const r = x.diag === false ? (main ? 'untested' : 'inferred') : main ? (i % 3 === 1 ? 'ng' : 'ok') : (i % 2 ? 'ng' : 'inferred');
+      results[x.id] = r;
+      const o = sk(x.id);
+      o.diag = r; o.diagScore = { ok: 60, inferred: 50, ng: 10, untested: 0 }[r];
+      o.score = Math.min(100, o.diagScore + [0, 15, 30, 45][i % 4]);
+      o.q = 5 + (i % 4) * 5; o.c = Math.round(o.q * 0.7);
+      if (main && x.diag !== false) {
+        const q = x.gen(), ok = r === 'ok';
+        items.push({ skill: x.id, q: q.q, user: ok ? ansOf(q) : 'わからない', ans: ansOf(q), explain: q.explain, ok });
+      }
+    });
+    st.diag = { date: addDays(today(), -13), results, items };
+    st.log.push({ d: addDays(today(), -13), t: Date.now() - 13 * 864e5, mode: 'diag', skill: null, q: items.length, c: items.filter((x) => x.ok).length, sec: 900 });
+    const pool = SK.list.filter((x) => x.grade === SK.main);
+    for (let k = 12; k >= 1; k--) {
+      if (k % 5 === 0) continue; // ところどころ休んだ日
+      const n = 1 + (k % 3);
+      for (let j = 0; j < n; j++) {
+        const x = pool[(k * 3 + j) % pool.length];
+        st.log.push({ d: addDays(today(), -k), t: Date.now() - k * 864e5 + j, mode: j === 2 ? 'review' : 'practice', skill: j === 2 ? null : x.id, q: j === 2 ? REVIEW_N : PRACTICE_N, c: j === 2 ? 7 : 3 + (k % 3), sec: 420 });
+      }
+      if (n >= 2) st.goalDays.push(addDays(today(), -k));
+    }
+    st.goal = { type: 'exam', daily: 2, exam: { name: GOALS.exam.names[0], date: addDays(today(), 10), units: SK.units.filter((u) => u.grade === SK.main).slice(0, 2).map((u) => u.id), base: true } };
+    st.ahead = { sets: 3, days: 1 };
+    checkBadges();
+    save();
+  }
 
   // ----- データの初期化（誤操作を防ぐため、確認を2回はさむ） -----
   SCREENS.reset = function (step) {
@@ -1254,7 +1352,7 @@ ${cancel}
     switchSubj: (d) => {
       if (d.c === course) return;
       try {
-        if (!peek(d.c)) { const o = blank(); o.profile = { name: st.profile.name, course: d.c, created: today() }; localStorage.setItem(storeKey(d.c), JSON.stringify(o)); }
+        if (!DEMO && !peek(d.c)) { const o = blank(); o.profile = { name: st.profile.name, course: d.c, created: today() }; localStorage.setItem(storeKey(d.c), JSON.stringify(o)); }
         localStorage.setItem(COURSE_KEY, d.c);
       } catch (e) { return toast('切りかえられませんでした'); }
       location.reload();
@@ -1298,6 +1396,37 @@ ${cancel}
     },
     quitDiag: () => { if (confirm('実力チェックをやめますか？（結果は保存されません）')) { D = null; P = null; clearSession(); go('home', undefined, { replace: true }); } },
     resume: () => resumeSession(),
+    ownerSet: () => {
+      const a = (document.getElementById('pin1').value || '').trim(), b = (document.getElementById('pin2').value || '').trim();
+      if (!/^\d{4}$/.test(a)) return toast('4けたの数字を入れてください');
+      if (a !== b) return toast('2回の入力が一致しません');
+      try { localStorage.setItem(OWNER_KEY, JSON.stringify({ pin: pinHash(a) })); } catch (e) { return toast('保存できませんでした'); }
+      ownerOK = true; toast('暗証番号を設定しました'); go('owner', undefined, { replace: true });
+    },
+    ownerLogin: () => {
+      const od = ownerData(), a = (document.getElementById('pin1').value || '').trim();
+      if (od && pinHash(a) === od.pin) { ownerOK = true; go('owner', undefined, { replace: true }); } else toast('暗証番号がちがいます');
+    },
+    ownerReset: () => {
+      if ((document.getElementById('pinreset').value || '').trim() !== 'リセット') return toast('「リセット」と入力してください');
+      try { localStorage.removeItem(OWNER_KEY); } catch (e) { /* そのまま */ }
+      ownerOK = false; toast('暗証番号を消しました。新しく設定してください'); go('owner', undefined, { replace: true });
+    },
+    ownerChange: () => go('owner', 'change'),
+    ownerSkill: (d) => go('ownerSkill', d.id, { replace: screen === 'ownerSkill' }),
+    demoStart: () => {
+      try { sessionStorage.setItem('manabi-step-demo', '1'); sessionStorage.setItem('manabi-step-demo-course', course); } catch (e) { return toast('この環境ではデモを使えません'); }
+      location.reload();
+    },
+    demoExit: () => {
+      try {
+        Object.keys(localStorage).filter((k) => k.startsWith('manabi-demo-')).forEach((k) => localStorage.removeItem(k));
+        const back = sessionStorage.getItem('manabi-step-demo-course');
+        if (back) localStorage.setItem(COURSE_KEY, back); // デモ中に教科を切りかえても、もとの教科にもどす
+        sessionStorage.removeItem('manabi-step-demo'); sessionStorage.removeItem('manabi-step-demo-course');
+      } catch (e) { /* そのまま */ }
+      location.reload();
+    },
     ahead: () => {
       if (!st.goal) return;
       const b = addAhead();
@@ -1400,5 +1529,13 @@ ${cancel}
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 
+  if (DEMO) {
+    if (!st.profile) seedDemo();
+    const bar = document.createElement('div');
+    bar.id = 'demobar';
+    bar.innerHTML = '<span>🔍 デモ表示中（本当の記録には影響しません）</span><button data-act="demoExit">終了</button>';
+    document.body.prepend(bar);
+    document.body.classList.add('demo');
+  }
   go(st.profile ? 'home' : 'setup', undefined, { replace: true });
 })();
