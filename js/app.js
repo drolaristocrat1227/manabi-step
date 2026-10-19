@@ -70,7 +70,7 @@
   });
 
   // ---------- 保存 ----------
-  const blank = () => ({ v: 1, profile: null, diag: null, skills: {}, log: [], goal: null, today: null, badges: {}, goalDays: [] });
+  const blank = () => ({ v: 1, profile: null, diag: null, skills: {}, log: [], goal: null, today: null, badges: {}, goalDays: [], ahead: { sets: 0, days: 0 } });
   let st = load();
 
   function load() {
@@ -143,8 +143,11 @@
 
   // ---------- レベルと称号 ----------
   const TITLES = SK.titles;
+  const AHEAD_SET_PT = 10, AHEAD_DAY_PT = 30;
+  const aheadOf = () => st.ahead || { sets: 0, days: 0 };
   function xp() {
-    return st.log.reduce((a, l) => a + l.c * 10 + (l.mode === 'diag' ? 50 : 20), 0);
+    const a = aheadOf();
+    return st.log.reduce((acc, l) => acc + l.c * 10 + (l.mode === 'diag' ? 50 : 20), 0) + a.sets * AHEAD_SET_PT + a.days * AHEAD_DAY_PT;
   }
   function levelOf(x) {
     let lv = 1; while (x >= 50 * lv * (lv + 1)) lv++;          // 次のレベルまで：100, 300, 600, 1000 …
@@ -174,6 +177,10 @@
     { id: 'master', icon: '⭐', name: 'はじめてのマスター', hint: 'どれか1つの単元を★3にする', ok: (s) => s.master >= 1 },
     { id: 'unit', icon: '🏅', name: '単元制覇', hint: '1つの単元のスキルをすべて★2にする', ok: (s) => s.units >= 1 },
     { id: 'lv5', icon: '🎖', name: 'レベル5', hint: 'レベル5になる', ok: (s) => s.lv >= 5 },
+    { id: 'ahead1', icon: '🚀', name: '前倒しデビュー', hint: '次の日の分を1セット前倒しでやる', ok: () => aheadOf().sets >= 1 },
+    { id: 'aheadDay1', icon: '⏩', name: '1日分前倒し', hint: '次の日の分を、1日分すべて前倒しで終える', ok: () => aheadOf().days >= 1 },
+    { id: 'aheadDay5', icon: '🏃', name: '前倒し5日分', hint: '合計5日分を前倒しで終える', ok: () => aheadOf().days >= 5 },
+    { id: 'ahead20', icon: '🌠', name: '前倒し20セット', hint: '合計20セットを前倒しでやる', ok: () => aheadOf().sets >= 20 },
   ];
   function badgeStats() {
     const sess = st.log.filter((l) => l.mode !== 'diag');
@@ -277,6 +284,29 @@
     }
     return st.today;
   }
+  // 前倒し：n 日先の分のメニュー。定期テストは計画表の n 日先、それ以外はまだやっていない次のおすすめ
+  function nextBatch(n) {
+    const g = st.goal, m = todayMenu();
+    if (g.type === 'exam') {
+      const pl = examPlan(g), day = pl.days[n];
+      return day ? day.tasks : [{ kind: 'review', ids: pl.range }];
+    }
+    const used = new Set(m.tasks.filter((t) => t.kind === 'skill').map((t) => t.id));
+    const order = g.type === 'entrance' ? SK.list.filter((x) => sk(x.id).score < 70) : recommendOrder();
+    const t = order.filter((x) => !used.has(x.id)).slice(0, g.daily).map((x) => ({ kind: 'skill', id: x.id }));
+    if (t.length) return t;
+    const strong = SK.list.filter((x) => sk(x.id).score >= 40).map((x) => x.id);
+    return [{ kind: 'review', ids: strong.length >= 2 ? strong : SK.list.map((x) => x.id) }];
+  }
+  const batchOf = (t) => t.b || 0;
+  const batchDone = (m, b) => m.tasks.every((t, k) => batchOf(t) !== b || m.done[k]);
+  const lastBatch = (m) => m.tasks.reduce((a, t) => Math.max(a, batchOf(t)), 0);
+  function addAhead() {
+    const m = todayMenu(), b = lastBatch(m) + 1;
+    nextBatch(b).forEach((t) => { m.tasks.push(Object.assign({}, t, { b })); m.done.push(false); });
+    save();
+    return b;
+  }
   const taskName = (t) => (t.kind === 'review' ? `総復習（${REVIEW_N}問）` : SK.byId[t.id].name);
 
   // ---------- 画面切りかえ ----------
@@ -354,15 +384,25 @@
   function menuCardHTML() {
     const m = todayMenu();
     if (!m.tasks.length) return '';
-    const done = m.done.filter(Boolean).length, all = m.tasks.length;
-    const finished = done === all;
+    const idx0 = m.tasks.map((t, i) => i).filter((i) => batchOf(m.tasks[i]) === 0);
+    const done = idx0.filter((i) => m.done[i]).length, all = idx0.length;
+    const finished = done === all, last = lastBatch(m), canAhead = finished && batchDone(m, last);
+    const row = (t, i, no) => `<button class="task ${m.done[i] ? 'done' : ''} ${batchOf(t) ? 'ahead' : ''}" data-act="task" data-i="${i}">
+    <span class="ck">${m.done[i] ? '✓' : no}</span><span class="nm">${esc(taskName(t))}${t.kind === 'skill' ? `<small>${SK.byId[t.id].grade === SK.main ? gname(SK.main) : gname(SK.byId[t.id].grade) + 'の復習'}・${stars(sk(t.id).score)}</small>` : '<small>いろいろな単元から出題</small>'}</span>
+    <span class="go">${m.done[i] ? 'もう一度' : 'はじめる ›'}</span></button>`;
+    let aheadHTML = '';
+    for (let b = 1; b <= last; b++) {
+      const ids = m.tasks.map((t, i) => i).filter((i) => batchOf(m.tasks[i]) === b);
+      aheadHTML += `<div class="ahead-h">🚀 前倒し：${b === 1 ? '明日' : b + '日先'}の分 <span>${ids.filter((i) => m.done[i]).length} / ${ids.length}</span>${batchDone(m, b) ? ' <b>達成！</b>' : ''}</div>`
+        + ids.map((i, k) => row(m.tasks[i], i, k + 1)).join('');
+    }
     return `<div class="card accent">
   <div class="row between"><div class="tag">今日のメニュー</div><span class="muted small">${done} / ${all} セット</span></div>
   <div class="bar"><i style="width:${Math.round((done / all) * 100)}%"></i></div>
-  ${m.tasks.map((t, i) => `<button class="task ${m.done[i] ? 'done' : ''}" data-act="task" data-i="${i}">
-    <span class="ck">${m.done[i] ? '✓' : i + 1}</span><span class="nm">${esc(taskName(t))}${t.kind === 'skill' ? `<small>${SK.byId[t.id].grade === SK.main ? gname(SK.main) : gname(SK.byId[t.id].grade) + 'の復習'}・${stars(sk(t.id).score)}</small>` : '<small>いろいろな単元から出題</small>'}</span>
-    <span class="go">${m.done[i] ? 'もう一度' : 'はじめる ›'}</span></button>`).join('')}
+  ${idx0.map((i, k) => row(m.tasks[i], i, k + 1)).join('')}
   ${finished ? '<div class="done-msg">🎉 今日の目標達成！よくがんばったね！</div>' : ''}
+  ${aheadHTML}
+  ${canAhead ? `<button class="btn soft big" data-act="ahead">🚀 ${last ? (last + 1) + '日先' : '明日'}の分を前倒しでやる</button><p class="note center">前倒しした分はボーナスポイントがもらえます。明日以降のメニューも軽くなります。</p>` : ''}
   ${st.goal.type === 'exam' ? '<button class="btn ghost" data-go="plan">テストまでの計画を見る</button>' : ''}
 </div>`;
   }
@@ -474,7 +514,7 @@ ${st.goal ? '<button class="btn ghost" data-act="goalClear">目標を設定し�
     render(`
 <button class="back" data-go="home">‹ ホーム</button>
 <h1 class="page-h">${esc(g.exam.name)}までの計画</h1>
-<p class="muted small">毎日の練習の結果に合わせて、計画は自動で調整されます。</p>
+<p class="muted small">毎日の練習の結果に合わせて、計画は自動で調整されます。今日のメニューを終えたら、ホームの「前倒しでやる」で明日の分に進めます。前倒しした分だけ、先の計画は軽くなります。</p>
 ${p.over ? `<div class="card warn">⏰ 全部を回るには日数が足りないので、<b>苦手なところを優先</b>しています。1日のセット数を増やすと、もっと回れます。</div>` : ''}
 <div class="card">
 ${p.days.map((d, i) => `<div class="pday ${i === 0 ? 'now' : ''}"><div class="pd">${i === 0 ? '今日' : fmtDay(d.d)}</div><div class="pt">${planLines(i === 0 ? todayMenu().tasks : d.tasks)}</div></div>`).join('')}
@@ -897,13 +937,18 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
     const c = S.results.filter(Boolean).length, sec = Math.round((Date.now() - S.start) / 1000);
     st.log.push({ d: today(), t: Date.now(), mode: S.mixed ? 'review' : 'practice', skill: S.mixed ? null : S.ids[0], q: S.results.length, c, sec });
     // 今日のメニューにチェック（最後まで解いたときだけ）
-    S.menuDone = false;
+    S.menuDone = false; S.aheadSet = false; S.aheadDay = 0;
     if (st.goal && S.results.length === S.n) {
       const m = todayMenu();
       const i = m.tasks.findIndex((t, k) => !m.done[k] && (S.mixed ? t.kind === 'review' : t.kind === 'skill' && t.id === S.ids[0]));
       if (i >= 0) {
         m.done[i] = true;
-        if (m.done.every(Boolean) && !st.goalDays.includes(today())) { st.goalDays.push(today()); S.menuDone = true; }
+        const b = batchOf(m.tasks[i]);
+        if (b === 0 && batchDone(m, 0) && !st.goalDays.includes(today())) { st.goalDays.push(today()); S.menuDone = true; }
+        if (b > 0) {
+          st.ahead = aheadOf(); st.ahead.sets++; S.aheadSet = true;
+          if (batchDone(m, b)) { st.ahead.days++; S.aheadDay = b; }
+        }
       }
     }
     save();
@@ -934,6 +979,8 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
     const r = recommend();
     render(`
 ${S.menuDone ? '<div class="card celebrate center"><div class="big-emoji">🎉</div><h2>今日の目標達成！</h2><p>よくがんばったね！この調子で続けよう。</p></div>' : ''}
+${S.aheadDay ? `<div class="card celebrate center"><div class="big-emoji">🚀</div><h2>前倒し達成！</h2><p>${S.aheadDay === 1 ? '明日' : S.aheadDay + '日先'}の分まで終わったよ。すごい！</p><div class="levelup">前倒しボーナス +${AHEAD_SET_PT + AHEAD_DAY_PT}pt</div><p class="muted small">これまでの前倒し：${aheadOf().days}日分・${aheadOf().sets}セット</p></div>`
+  : S.aheadSet ? `<div class="card center"><b>🚀 前倒しボーナス +${AHEAD_SET_PT}pt</b><p class="muted small">先の分を進めているよ。この調子！</p></div>` : ''}
 <div class="card accent center">
   <div class="big-emoji">${c === n ? '🏆' : c >= n / 2 ? '✨' : '🌱'}</div>
   <h2>${S.mixed ? '総復習　' : ''}${c} / ${n} 問正解</h2>
@@ -944,6 +991,7 @@ ${S.menuDone ? '<div class="card celebrate center"><div class="big-emoji">🎉</
   <p class="muted small">🔥 ${streak()}日連続で学習中</p>
 </div>
 ${nextTask >= 0 ? `<button class="btn primary big" data-act="task" data-i="${nextTask}">次のメニュー：${esc(taskName(m.tasks[nextTask]))}</button>` : ''}
+${m && nextTask < 0 && m.tasks.length ? `<button class="btn primary big" data-act="ahead">🚀 ${lastBatch(m) ? (lastBatch(m) + 1) + '日先' : '明日'}の分を前倒しでやる</button>` : ''}
 <button class="btn ${nextTask >= 0 ? 'soft' : 'primary'} big" data-act="again">もう1セット</button>
 ${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft big" data-act="lesson" data-id="${r.id}">おすすめ：${esc(r.name)}</button>` : ''}
 <button class="btn ghost" data-go="home">ホームへ</button>`);
@@ -1060,6 +1108,7 @@ ${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft
   <div class="stat"><div class="v">${all.q ? Math.round((all.c / all.q) * 100) : 0}%</div><div class="k">正答率</div></div>
   <div class="stat"><div class="v">${fmtMin(all.sec)}</div><div class="k">学習時間</div></div>
 </div>
+${aheadOf().sets ? `<div class="card"><b>🚀 前倒しの記録</b><p>前倒しで終えた分：<b>${aheadOf().days}日分</b>（${aheadOf().sets}セット）</p><p class="muted small">前倒しボーナス 合計 ${aheadOf().sets * AHEAD_SET_PT + aheadOf().days * AHEAD_DAY_PT}pt</p></div>` : ''}
 <div class="card">
   <div class="row between"><b>バッジ</b><span class="muted small">${got} / ${BADGES.length}</span></div>
   <div class="badges">${BADGES.map((b) => st.badges[b.id]
@@ -1249,6 +1298,14 @@ ${cancel}
     },
     quitDiag: () => { if (confirm('実力チェックをやめますか？（結果は保存されません）')) { D = null; P = null; clearSession(); go('home', undefined, { replace: true }); } },
     resume: () => resumeSession(),
+    ahead: () => {
+      if (!st.goal) return;
+      const b = addAhead();
+      toast(`${b === 1 ? '明日' : b + '日先'}の分を、今日のメニューに追加しました`);
+      const m = todayMenu(), i = m.tasks.findIndex((t, k) => !m.done[k]);
+      go('home');
+      if (i >= 0) { const el = document.querySelector(`[data-act=task][data-i="${i}"]`); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' }); }
+    },
     resumeDrop: () => { if (confirm('前回の続きを破棄しますか？')) { clearSession(); go('home', undefined, { replace: true }); } },
     // 目標の設定
     goalType: (d) => { readGoalForm(); G.type = d.k; go('goal', true); },

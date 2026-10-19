@@ -383,3 +383,11 @@ body.memo-open #app { padding-bottom: calc(46vh + 24px); }
 /* 前回の続き */
 .card.resume { border: 2px solid var(--primary); background: var(--soft); }
 .card.resume h3 { margin: 4px 0; }
+
+/* 前倒し */
+.ahead-h { margin: 14px 0 0; padding-top: 10px; border-top: 2px dashed var(--line); font-weight: 800; font-size: .9rem; color: var(--primary); }
+.ahead-h span { color: var(--muted); font-weight: 600; margin-left: 6px; }
+.ahead-h b { color: var(--ok); margin-left: 4px; }
+.task.ahead .ck { background: #fff1d6; color: #b8730a; }
+.task.ahead.done .ck { background: var(--ok); color: #fff; }
+.note.center { text-align: center; }
