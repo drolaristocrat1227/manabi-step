@@ -419,3 +419,30 @@ body.memo-open #app { padding-bottom: calc(46vh + 24px); }
 .cpick-row .cface { flex: none; width: 70px; height: 70px; }
 .cpick-row small { display: block; color: var(--muted); font-size: .8rem; line-height: 1.5; }
 .cpick-row small.say { color: var(--primary); margin-top: 2px; }
+
+/* 知識カード */
+.tier { display: inline-block; padding: 1px 8px; border-radius: 99px; font-weight: 700; }
+.t1 { --c1: #e9b38a; --c2: #b8743d; }
+.t2 { --c1: #eef2f7; --c2: #9aa6b5; }
+.t3 { --c1: #ffe680; --c2: #e0a800; }
+.tier.t1, .tier.t2, .tier.t3 { background: linear-gradient(135deg, var(--c1), var(--c2)); color: #1f2a44; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.kcard { position: relative; min-height: 112px; border: 0; border-radius: 12px; padding: 10px 6px 8px; text-align: center; color: #1f2a44; background: linear-gradient(160deg, var(--c1), var(--c2)); box-shadow: 0 2px 4px rgba(20, 30, 60, .18); display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.kcard b { font-size: .75rem; line-height: 1.3; }
+.kc-ic { font-size: 1.5rem; line-height: 1; background: rgba(255, 255, 255, .6); border-radius: 50%; width: 38px; height: 38px; display: grid; place-items: center; }
+.kc-tier { font-size: .65rem; font-weight: 700; margin-top: auto; }
+.kcard.locked { background: var(--bg); color: var(--muted); box-shadow: none; border: 2px dashed var(--line); }
+.kcard.locked .kc-ic { background: var(--line); color: var(--muted); }
+.bigcard { border-radius: 18px; padding: 16px; margin-bottom: 14px; color: #1f2a44; background: linear-gradient(160deg, var(--c1, #e3e7f1), var(--c2, #b0b8c8)); box-shadow: 0 4px 10px rgba(20, 30, 60, .2); }
+.bigcard.t0 { --c1: #eceff4; --c2: #c9cfda; }
+.bc-top { display: flex; justify-content: space-between; font-size: .75rem; font-weight: 700; }
+.bigcard h2 { margin: 10px 0 2px; font-size: 1.35rem; }
+.bc-unit { font-size: .8rem; opacity: .8; }
+.bc-point { margin-top: 12px; background: rgba(255, 255, 255, .75); border-radius: 12px; padding: 12px; font-weight: 600; line-height: 1.7; }
+.bc-point.locked { font-weight: 400; color: #555; }
+.bc-stars { margin-top: 8px; text-align: right; }
+.newcard { margin-top: 10px; font-weight: 800; color: #b8730a; }
+.cmini { display: inline-block; margin: 4px 3px 0; padding: 4px 10px; border-radius: 99px; font-size: .8rem; font-weight: 700; color: #1f2a44; background: linear-gradient(135deg, var(--c1, #eee), var(--c2, #ccc)); }
+.cmini i { font-style: normal; margin-left: 4px; font-size: .7rem; }
+.bigcard .stars { color: #a35a00; font-size: 1.1rem; }
+.bigcard .stars i { color: rgba(0, 0, 0, .18); }

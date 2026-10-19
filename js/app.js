@@ -72,7 +72,7 @@
   });
 
   // ---------- 保存 ----------
-  const blank = () => ({ v: 1, profile: null, diag: null, skills: {}, log: [], goal: null, today: null, badges: {}, goalDays: [], ahead: { sets: 0, days: 0 }, coach: null });
+  const blank = () => ({ v: 1, profile: null, diag: null, skills: {}, log: [], goal: null, today: null, badges: {}, goalDays: [], ahead: { sets: 0, days: 0 }, coach: null, cards: {}, spent: 0 });
   let st = load();
 
   function load() {
@@ -195,6 +195,8 @@
     { id: 'aheadDay1', icon: '⏩', name: '1日分前倒し', hint: '次の日の分を、1日分すべて前倒しで終える', ok: () => aheadOf().days >= 1 },
     { id: 'aheadDay5', icon: '🏃', name: '前倒し5日分', hint: '合計5日分を前倒しで終える', ok: () => aheadOf().days >= 5 },
     { id: 'ahead20', icon: '🌠', name: '前倒し20セット', hint: '合計20セットを前倒しでやる', ok: () => aheadOf().sets >= 20 },
+    { id: 'cards10', icon: '🎴', name: 'カード10枚', hint: '知識カードを10枚集める', ok: () => Object.keys(st.cards || {}).length >= 10 },
+    { id: 'cardsAll', icon: '📚', name: 'カード全部', hint: 'この教科の知識カードを全部集める', ok: () => SK.list.every((x) => (st.cards || {})[x.id]) },
   ];
   function badgeStats() {
     const sess = st.log.filter((l) => l.mode !== 'diag');
@@ -340,7 +342,7 @@
     const inSession = name === 'practice' || name === 'diag';
     if (!inSession) memoClose();
     nav.hidden = !st.profile || inSession || name === 'setup';
-    nav.querySelectorAll('[data-go]').forEach((b) => b.classList.toggle('on', b.dataset.go === name || (name === 'lesson' && b.dataset.go === 'map')));
+    nav.querySelectorAll('[data-go]').forEach((b) => b.classList.toggle('on', b.dataset.go === name || (name === 'lesson' && b.dataset.go === 'map') || (name === 'card' && b.dataset.go === 'zukan')));
   }
   const render = (html) => { app.innerHTML = html; };
 
@@ -581,6 +583,7 @@ ${bubble('diag', 'happy')}
 
   let D = null; // 実力チェック中の状態
   let newBadges = []; // 直前に取れたバッジ（結果画面で表示）
+  let newCards = []; // 実力チェックで手に入ったカード
   function diagStart() {
     D = { queue: SK.list.filter((s) => s.grade === SK.main && s.diag !== false).map((s) => s.id), tested: {}, start: Date.now(), cur: null, items: [] };
     nextDiag();
@@ -629,6 +632,7 @@ ${bubble('diag', 'happy')}
     save();
     D = null; P = null;
     st.resume = null; save();
+    newCards = syncCards(); save();
     newBadges = checkBadges();
     go('diagResult', undefined, { replace: true });
   }
@@ -639,6 +643,7 @@ ${bubble('diag', 'happy')}
     const r = recommend();
     const mark = { ok: ['◎', 'できている', 'ok'], inferred: ['○', 'たぶんOK', 'inf'], ng: ['！', '復習しよう', 'ng'], untested: ['−', '未確認', 'un'] };
     const nb = newBadges; newBadges = [];
+    const nc = newCards; newCards = [];
     render(`
 <div class="card accent center">
   <div class="big-emoji">🎯</div>
@@ -647,6 +652,7 @@ ${bubble('diag', 'happy')}
   ${ok ? `<p>できていることが <b class="hl">${ok}個</b> 見つかりました。</p>` : '<p>おつかれさま！ここからが本当のスタート。<br>一歩ずつ、ぐんぐん伸ばしていこう！</p>'}
   <p class="muted">「！」の単元を伸ばしていけば、もっと解けるようになります。</p>
   ${nb.length ? `<div class="newbadge">🏅 バッジ獲得！<div>${badgeChips(nb)}</div></div>` : ''}
+  ${nc.length ? `<div class="newcard">🎴 知識カードを ${nc.length}枚 ゲット！<button class="btn soft small" data-go="zukan">図鑑を見る</button></div>` : ''}
 </div>
 ${st.goal ? '' : `<div class="card"><div class="tag">次はここ</div><h3>目標を決めよう</h3><p class="muted small">目的に合わせて、毎日のメニューを作ります。</p><button class="btn primary big" data-go="goal">目標を決める</button></div>`}
 ${SK.units.map((u) => `
@@ -996,6 +1002,7 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
     save();
     st.resume = null; P = null;
     save();
+    S.newCards = syncCards(S.ids); save();
     S.badges = checkBadges();
     S.lvAfter = levelOf(xp()).lv;
     go('summary', undefined, { replace: true });
@@ -1032,6 +1039,7 @@ ${S.aheadDay ? `<div class="card celebrate center"><div class="big-emoji">🚀</
   ${detail}
   ${S.lvAfter > S.lvBefore ? `<div class="levelup big">🎊 レベルアップ！ Lv.${L.lv}「${esc(L.title)}」</div>` : ''}
   ${S.badges.length ? `<div class="newbadge">🏅 バッジ獲得！<div>${badgeChips(S.badges)}</div></div>` : ''}
+  ${S.newCards && S.newCards.length ? `<div class="newcard">🎴 ${S.newCards.every((c) => c.from) ? 'カードが進化した！' : S.newCards.some((c) => c.from) ? '新しいカードと、進化したカード！' : '新しいカードをゲット！'}<div>${S.newCards.map((c) => cardMini(c.id)).join('')}</div><button class="btn soft small" data-go="zukan">図鑑を見る</button></div>` : ''}
   <p class="muted small">🔥 ${streak()}日連続で学習中</p>
 </div>
 ${nextTask >= 0 ? `<button class="btn primary big" data-act="task" data-i="${nextTask}">次のメニュー：${esc(taskName(m.tasks[nextTask]))}</button>` : ''}
@@ -1130,6 +1138,58 @@ ${nextTask < 0 && r && (S.mixed || r.id !== S.ids[0]) ? `<button class="btn soft
   </div>
 </div>
 <div class="sheet">${qs}${as}</div>`);
+  };
+
+  // ----- 知識カード（図鑑）：★1で銅、★2で銀、★3で金。一度もらったカードはなくならない -----
+  const TIERS = ['', '銅', '銀', '金'];
+  const tierOf = (score) => (score >= 90 ? 3 : score >= 70 ? 2 : score >= 40 ? 1 : 0);
+  // 今の習熟度にあわせてカードを更新し、新しく手に入った（進化した）カードを返す（from：前の段階、0 なら新しいカード）
+  function syncCards(ids) {
+    st.cards = st.cards || {};
+    const got = [];
+    (ids || SK.list.map((x) => x.id)).forEach((id) => {
+      const t = tierOf(sk(id).score);
+      if (t > (st.cards[id] || 0)) { got.push({ id, from: st.cards[id] || 0 }); st.cards[id] = t; }
+    });
+    return got;
+  }
+  // カードの表に書く「覚えておきたいポイント」（解説の最初の要点）
+  function cardPoint(x) {
+    const d = document.createElement('div'); d.innerHTML = x.lesson;
+    const pt = d.querySelector('.pt');
+    return (pt ? pt.textContent : d.textContent).trim();
+  }
+  const cardMini = (id) => { const t = (st.cards || {})[id] || 0; return `<span class="cmini t${t}">${SK.icon || '🎴'} ${esc(SK.byId[id].name)}${t ? `<i>${TIERS[t]}</i>` : ''}</span>`; };
+  SCREENS.zukan = function () {
+    const cards = st.cards || {}, all = SK.list.length, have = SK.list.filter((x) => cards[x.id]).length;
+    const n = (t) => SK.list.filter((x) => cards[x.id] === t).length;
+    render(`
+<h1 class="page-h">知識カード図鑑</h1>
+<div class="card"><div class="row between"><b>${have} / ${all} 枚</b><span class="small"><span class="tier t3">金 ${n(3)}</span> <span class="tier t2">銀 ${n(2)}</span> <span class="tier t1">銅 ${n(1)}</span></span></div>
+<div class="bar"><i style="width:${Math.round((have / all) * 100)}%"></i></div>
+<p class="note">★1で銅、★2で銀、★3で金のカードになります。カードを開くと、その単元のポイントを見直せます。</p></div>
+${[SK.main, PREV].map((g) => `<h2 class="grade-h">${SK.gradeTitle[g]}</h2>${SK.units.filter((u) => u.grade === g).map((u) => `<div class="card"><div class="unit-h">${esc(u.name)}</div><div class="cards">${u.skills.map((id) => {
+      const t = cards[id] || 0, x = SK.byId[id];
+      return t ? `<button class="kcard t${t}" data-act="cardOpen" data-id="${id}"><span class="kc-ic">${SK.icon || '🎴'}</span><b>${esc(x.name)}</b><span class="kc-tier">${TIERS[t]}</span></button>`
+        : `<button class="kcard locked" data-act="cardOpen" data-id="${id}"><span class="kc-ic">？</span><b>${esc(x.name)}</b><span class="kc-tier">★1でゲット</span></button>`;
+    }).join('')}</div></div>`).join('')}`).join('')}`);
+  };
+  SCREENS.card = function (id) {
+    const x = SK.byId[id];
+    if (!x) return go('zukan', undefined, { replace: true });
+    const t = (st.cards || {})[id] || 0;
+    render(`
+<button class="back" data-go="zukan">‹ 図鑑</button>
+<div class="bigcard t${t}">
+  <div class="bc-top"><span>${SK.icon || '🎴'} ${esc(SK.subj)}・${gname(x.grade)}</span><span>${t ? TIERS[t] + 'のカード' : 'まだ持っていません'}</span></div>
+  <h2>${esc(x.name)}</h2>
+  <div class="bc-unit">${esc(SK.unitById[x.unit].name)}</div>
+  ${t ? `<div class="bc-point">${esc(cardPoint(x))}</div>` : `<div class="bc-point locked">練習して★1になると、このカードが手に入ります。</div>`}
+  <div class="bc-stars">${stars(sk(id).score)}</div>
+</div>
+${t ? `<div class="card lesson"><div class="tag">ポイントの見直し</div>${x.lesson}</div>` : ''}
+${t && t < 3 ? `<p class="note center">あと${t === 1 ? '★2で銀' : '★3で金'}のカードに進化します。</p>` : ''}
+<button class="btn primary big" data-act="practice" data-id="${id}">練習する（${PRACTICE_N}問）</button>`);
   };
 
   // ----- 学習記録 -----
@@ -1440,6 +1500,7 @@ ${cancel}
     },
     quitDiag: () => { if (confirm('実力チェックをやめますか？（結果は保存されません）')) { D = null; P = null; clearSession(); go('home', undefined, { replace: true }); } },
     resume: () => resumeSession(),
+    cardOpen: (d) => go('card', d.id),
     coachPick: (d) => {
       const first = !st.coach;
       st.coach = d.c; save();
@@ -1587,5 +1648,6 @@ ${cancel}
     document.body.prepend(bar);
     document.body.classList.add('demo');
   }
+  if (st.profile && syncCards().length) save();
   go(st.profile ? 'home' : 'setup', undefined, { replace: true });
 })();
