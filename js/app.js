@@ -72,7 +72,7 @@
   });
 
   // ---------- 保存 ----------
-  const blank = () => ({ v: 1, profile: null, diag: null, skills: {}, log: [], goal: null, today: null, badges: {}, goalDays: [], ahead: { sets: 0, days: 0 } });
+  const blank = () => ({ v: 1, profile: null, diag: null, skills: {}, log: [], goal: null, today: null, badges: {}, goalDays: [], ahead: { sets: 0, days: 0 }, coach: null });
   let st = load();
 
   function load() {
@@ -119,6 +119,18 @@
     giveup: ['ここで覚えれば、次は解ける！', '解説を読むのも立派な勉強だよ', 'まちがいは伸びしろ。解説をチェックしよう'],
     tips: ['毎日少しずつが一番の近道。', '「わからない」がわかるのも前進です。', 'まちがえた問題こそ、宝物。', '昨日の自分より1問多く。', '5分だけでもOK。続けることが力になる。'],
   };
+
+  // ---------- コーチ（js/coach.js の絵とセリフを使う） ----------
+  const CO = window.COACH;
+  const coachOf = () => (st.coach && CO && CO.byId(st.coach)) || null;
+  function bubble(cat, mood, vars, small) {
+    const c = coachOf();
+    if (!c) return '';
+    const text = CO.line(c.id, cat, Object.assign({ name: esc(st.profile ? st.profile.name : '') }, vars || {}));
+    return `<div class="coach ${small ? 'sm' : ''}"><div class="cface">${CO.svg(c.id, mood)}</div><div class="cbubble"><b>${esc(c.name)}</b>${text}</div></div>`;
+  }
+  // 練習中の声かけ：コーチがいればコーチ、いなければこれまでの言葉
+  const fbHead = (emoji, cat, mood, fallback) => (coachOf() ? bubble(cat, mood, null, true) : `<div class="fb-h">${emoji} ${pick(fallback)}</div>`);
 
   // ---------- 記録の集計 ----------
   function streak() {
@@ -409,6 +421,31 @@
 </div>`;
   }
 
+  // ホームのコーチの声かけ（前回の続き → 久しぶり → 実力チェック前 → メニュー達成 → テスト直前 → 次のメニュー → 連続日数 → あいさつ）
+  function homeCoach(rl, s, h) {
+    if (rl) return bubble('resume', 'normal');
+    const last = st.log.length ? st.log[st.log.length - 1].d : null;
+    if (last && daysBetween(last, today()) >= 3) return bubble('comeback', 'happy');
+    if (!st.diag) return bubble('diag', 'happy');
+    if (st.goal) {
+      const m = todayMenu(), i = m.tasks.findIndex((t, k) => !m.done[k]);
+      if (m.tasks.length && batchDone(m, 0) && i < 0) return bubble('menu_done', 'happy');
+      if (st.goal.type === 'exam') { const left = daysBetween(today(), st.goal.exam.date); if (left > 0 && left <= 3) return bubble('exam', 'normal', { exam: esc(st.goal.exam.name), days: left }); }
+      if (i >= 0) return bubble('menu_todo', 'normal', { task: esc(taskName(m.tasks[i])) });
+    }
+    if (s >= 3) return bubble('streak', 'happy', { streak: s });
+    return bubble(h < 11 ? 'morning' : h < 18 ? 'afternoon' : 'evening', 'happy');
+  }
+  // コーチを選ぶ
+  const coachChoices = () => CO.LIST.map((c) => `<button class="cpick ${st.coach === c.id ? 'on' : ''}" data-act="coachPick" data-c="${c.id}"><span class="cface">${CO.svg(c.id, 'happy')}</span><b>${esc(c.name)}</b><small>${esc(c.kind)}</small></button>`).join('');
+  const coachPickCard = () => (CO ? `<div class="card"><div class="tag">はじめに</div><h3>いっしょに学ぶコーチを選ぼう</h3><p class="muted small">あとから「記録」→「設定」で変えられます。</p><div class="cpicks">${coachChoices()}</div></div>` : '');
+  SCREENS.coach = function () {
+    render(`
+<button class="back" data-go="records">‹ 学習の記録</button>
+<h1 class="page-h">コーチを選ぶ</h1>
+${CO.LIST.map((c) => `<button class="card cpick-row ${st.coach === c.id ? 'on' : ''}" data-act="coachPick" data-c="${c.id}"><span class="cface">${CO.svg(c.id, 'happy')}</span><span><b>${esc(c.name)}</b>（${esc(c.kind)}）<small>${esc(c.desc)}</small><small class="say">「${CO.line(c.id, 'ok', {})}」</small></span></button>`).join('')}`);
+  };
+
   SCREENS.home = function () {
     const p = st.profile, s = streak(), t = totals(today());
     const h = new Date().getHours();
@@ -444,7 +481,7 @@ ${r ? `<div class="card"><div class="tag">おすすめ</div><h3>${esc(r.name)}</
 <button class="btn primary big" data-act="resume">続きから再開</button><button class="btn ghost" data-act="resumeDrop">続きを破棄する</button></div>` + main;
     render(`
 ${subs.length > 1 ? `<div class="subjbar">${subs.map(([x, c]) => `<button class="${c === course ? 'on' : ''}" data-act="switchSubj" data-c="${c}"><span>${x[1]}</span>${c === course ? subjName(SK) : subjName(window.COURSES[c])}</button>`).join('')}</div>` : ''}
-<div class="greet">${hello}、<b>${esc(p.name)}</b> さん</div>
+${st.coach ? homeCoach(rl, s, h) : `<div class="greet">${hello}、<b>${esc(p.name)}</b> さん</div>${coachPickCard()}`}
 <div class="lvcard"><div class="lv">Lv.${L.lv}</div><div class="lvt"><b>${esc(L.title)}</b><div class="bar sm"><i style="width:${L.pct}%"></i></div><span class="muted small">次のレベルまで ${L.rest} pt</span></div></div>
 <div class="stats">
   <div class="stat"><div class="v">🔥 ${s}</div><div class="k">日連続</div></div>
@@ -528,6 +565,7 @@ ${p.days.map((d, i) => `<div class="pday ${i === 0 ? 'now' : ''}"><div class="pd
   // ----- 実力チェック -----
   SCREENS.diagIntro = function () {
     render(`
+${bubble('diag', 'happy')}
 <div class="card">
   <h2>実力チェック</h2>
   <ul class="list">
@@ -605,6 +643,7 @@ ${p.days.map((d, i) => `<div class="pday ${i === 0 ? 'now' : ''}"><div class="pd
 <div class="card accent center">
   <div class="big-emoji">🎯</div>
   <h2>実力チェック完了！</h2>
+  ${bubble('diag_done', 'happy')}
   ${ok ? `<p>できていることが <b class="hl">${ok}個</b> 見つかりました。</p>` : '<p>おつかれさま！ここからが本当のスタート。<br>一歩ずつ、ぐんぐん伸ばしていこう！</p>'}
   <p class="muted">「！」の単元を伸ばしていけば、もっと解けるようになります。</p>
   ${nb.length ? `<div class="newbadge">🏅 バッジ獲得！<div>${badgeChips(nb)}</div></div>` : ''}
@@ -674,6 +713,7 @@ ${SK.units.filter((u) => u.grade === g).map((u) => `
 </div>
 ${pre.length ? `<div class="card warn">💡 先に <b>${pre.map((p) => esc(SK.byId[p].name)).join('、')}</b> を練習すると、もっとわかりやすくなるよ。
   <div class="row">${pre.map((p) => `<button class="btn small" data-act="lesson" data-id="${p}">${esc(SK.byId[p].name)}へ</button>`).join('')}</div></div>` : ''}
+${bubble('lesson', 'normal', null, true)}
 <div class="card lesson"><div class="tag">ポイント</div>${s.lesson}</div>
 <button class="btn primary big" data-act="practice" data-id="${id}">練習する（${PRACTICE_N}問）</button>
 <button class="btn soft" data-act="printOpen" data-skill="${id}" data-back="map">🖨 この単元のプリントを作る</button>`);
@@ -893,12 +933,12 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
     if (correct) {
       const clean = P.tries === 0 && P.hint === 0;
       finishQ(true, clean ? 15 : 7);
-      P.feedback = { type: 'ok', html: `<div class="fb-h">⭕ ${pick(clean ? MSG.ok : MSG.okHint)}</div><details><summary>解き方を確認</summary>${P.q.explain}</details>` };
+      P.feedback = { type: 'ok', html: `${fbHead('⭕', clean ? 'ok' : 'okHint', 'happy', clean ? MSG.ok : MSG.okHint)}<details><summary>解き方を確認</summary>${P.q.explain}</details>` };
     } else if (P.tries === 0) {
       P.tries = 1;
       if (P.q.choices) { P.wrongPicks = [P.picked]; }
       if (P.hint === 0) P.hint = 1;
-      P.feedback = { type: 'retry', html: `<div class="fb-h">🤔 ${pick(MSG.retry)}</div>` };
+      P.feedback = { type: 'retry', html: fbHead('🤔', 'retry', 'think', MSG.retry) };
     } else {
       reveal();
       return;
@@ -908,7 +948,7 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
 
   function reveal() {
     finishQ(false, -5);
-    P.feedback = { type: 'ng', html: `<div class="fb-h">📘 ${pick(MSG.giveup)}</div><div class="ans">答え：${answerText()}</div><div class="exp">${P.q.explain}</div>` };
+    P.feedback = { type: 'ng', html: `${fbHead('📘', 'giveup', 'normal', MSG.giveup)}<div class="ans">答え：${answerText()}</div><div class="exp">${P.q.explain}</div>` };
     rerender();
   }
 
@@ -979,6 +1019,8 @@ ${f.post ? `<span class="fpost">${esc(f.post)}</span>` : ''}</div>`;
     const m = st.goal ? todayMenu() : null;
     const nextTask = m ? m.tasks.findIndex((t, k) => !m.done[k]) : -1;
     const r = recommend();
+    const upAny = S.mixed ? S.ids.some((id) => starsOf(sk(id).score) > starsOf(S.before[id])) : starsOf(sk(S.ids[0]).score) > starsOf(S.before[S.ids[0]]);
+    const coachSay = S.aheadDay ? bubble('ahead', 'happy') : c === n ? bubble('sum_perfect', 'happy') : upAny ? bubble('sum_up', 'happy') : c >= n - 1 ? bubble('sum_good', 'happy') : bubble('sum_try', 'normal');
     render(`
 ${S.menuDone ? '<div class="card celebrate center"><div class="big-emoji">🎉</div><h2>今日の目標達成！</h2><p>よくがんばったね！この調子で続けよう。</p></div>' : ''}
 ${S.aheadDay ? `<div class="card celebrate center"><div class="big-emoji">🚀</div><h2>前倒し達成！</h2><p>${S.aheadDay === 1 ? '明日' : S.aheadDay + '日先'}の分まで終わったよ。すごい！</p><div class="levelup">前倒しボーナス +${AHEAD_SET_PT + AHEAD_DAY_PT}pt</div><p class="muted small">これまでの前倒し：${aheadOf().days}日分・${aheadOf().sets}セット</p></div>`
@@ -986,7 +1028,7 @@ ${S.aheadDay ? `<div class="card celebrate center"><div class="big-emoji">🚀</
 <div class="card accent center">
   <div class="big-emoji">${c === n ? '🏆' : c >= n / 2 ? '✨' : '🌱'}</div>
   <h2>${S.mixed ? '総復習　' : ''}${c} / ${n} 問正解</h2>
-  <p>${msg}</p>
+  ${coachSay ? `<div class="coach-in">${coachSay}</div>` : `<p>${msg}</p>`}
   ${detail}
   ${S.lvAfter > S.lvBefore ? `<div class="levelup big">🎊 レベルアップ！ Lv.${L.lv}「${esc(L.title)}」</div>` : ''}
   ${S.badges.length ? `<div class="newbadge">🏅 バッジ獲得！<div>${badgeChips(S.badges)}</div></div>` : ''}
@@ -1142,6 +1184,7 @@ ${aheadOf().sets ? `<div class="card"><b>🚀 前倒しの記録</b><p>前倒し
 <div class="card no-print">
   <b>設定</b>
   <button class="btn soft" data-go="goal">目標を${st.goal ? '変更' : '決める'}</button>
+  <button class="btn soft" data-go="coach">コーチを${st.coach ? '変える（いま：' + esc((coachOf() || {}).name || '') + '）' : '選ぶ'}</button>
   <button class="btn soft" data-act="rename">ニックネームを変更</button>
   <button class="btn soft" data-go="course">学年・教科を切りかえる（いま：${esc(SK.title)}）</button>
   ${st.diag ? '<button class="btn soft" data-go="diagResult">前回の実力チェックの結果・解説</button>' : ''}
@@ -1256,6 +1299,7 @@ ${qs.map((q, k) => `<div class="card rv"><div class="rv-h"><span class="muted sm
     }
     st.goal = { type: 'exam', daily: 2, exam: { name: GOALS.exam.names[0], date: addDays(today(), 10), units: SK.units.filter((u) => u.grade === SK.main).slice(0, 2).map((u) => u.id), base: true } };
     st.ahead = { sets: 3, days: 1 };
+    st.coach = 'owl';
     checkBadges();
     save();
   }
@@ -1352,7 +1396,7 @@ ${cancel}
     switchSubj: (d) => {
       if (d.c === course) return;
       try {
-        if (!DEMO && !peek(d.c)) { const o = blank(); o.profile = { name: st.profile.name, course: d.c, created: today() }; localStorage.setItem(storeKey(d.c), JSON.stringify(o)); }
+        if (!DEMO && !peek(d.c)) { const o = blank(); o.profile = { name: st.profile.name, course: d.c, created: today() }; o.coach = st.coach; localStorage.setItem(storeKey(d.c), JSON.stringify(o)); }
         localStorage.setItem(COURSE_KEY, d.c);
       } catch (e) { return toast('切りかえられませんでした'); }
       location.reload();
@@ -1396,6 +1440,12 @@ ${cancel}
     },
     quitDiag: () => { if (confirm('実力チェックをやめますか？（結果は保存されません）')) { D = null; P = null; clearSession(); go('home', undefined, { replace: true }); } },
     resume: () => resumeSession(),
+    coachPick: (d) => {
+      const first = !st.coach;
+      st.coach = d.c; save();
+      toast(`${CO.byId(d.c).name}が、あなたのコーチになりました！`);
+      go(first || screen === 'home' ? 'home' : 'coach', undefined, { replace: true });
+    },
     ownerSet: () => {
       const a = (document.getElementById('pin1').value || '').trim(), b = (document.getElementById('pin2').value || '').trim();
       if (!/^\d{4}$/.test(a)) return toast('4けたの数字を入れてください');
