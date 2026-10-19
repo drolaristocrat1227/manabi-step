@@ -1537,5 +1537,10 @@ ${cancel}
     document.body.prepend(bar);
     document.body.classList.add('demo');
   }
-  go(st.profile ? 'home' : 'setup', undefined, { replace: true });
+  // 解いている途中で再読み込みされたとき（30分以内）は、ホームではなく同じ問題にそのまま戻る
+  const RESUME_AUTO = 30 * 60 * 1000;
+  if (st.profile && st.resume && st.resume.at && Date.now() - st.resume.at < RESUME_AUTO) {
+    resumeSession();
+    toast('解いていた問題にもどりました');
+  } else go(st.profile ? 'home' : 'setup', undefined, { replace: true });
 })();

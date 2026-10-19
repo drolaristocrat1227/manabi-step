@@ -26,6 +26,8 @@
 }
 
 * { box-sizing: border-box; }
+/* 画面の上で下に引っぱっても再読み込みしない（解いている途中に誤って更新されないように） */
+html, body { overscroll-behavior-y: none; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
